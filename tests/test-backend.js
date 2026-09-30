@@ -24,6 +24,12 @@ class Range {
     return this;
   }
   setValue(v) { this.sheet.put(this.row, this.col, v); return this; }
+  clearContent() {
+    for (let r = 0; r < this.nr; r++) {
+      for (let c = 0; c < this.nc; c++) this.sheet.put(this.row + r, this.col + c, '');
+    }
+    return this;
+  }
   setFontWeight() { return this; }
 }
 class Sheet {
@@ -41,6 +47,7 @@ class Sheet {
     return last;
   }
   appendRow(arr) { this.rows.push(arr.slice()); }
+  deleteRow(r) { this.rows.splice(r - 1, 1); }
   getRange(a, b, c, d) { return new Range(this, a, b, c || 1, d || 1); }
   setFrozenRows() { return this; }
 }
@@ -94,6 +101,12 @@ const wrapper = new Function('exports', src + `
   exports.bayarHutang_ = bayarHutang_; exports.tambahHutang_ = tambahHutang_; exports.batalkan_ = batalkan_;
   exports.setAnggaran_ = setAnggaran_; exports.parseNominal_ = parseNominal_; exports.normalKategori_ = normalKategori_;
   exports.api_ = api_; exports.doGet = doGet; exports.doPost = doPost; exports.prosesTelegram_ = prosesTelegram_;
+  exports.ubahTransaksi_ = ubahTransaksi_; exports.cariTransaksi_ = cariTransaksi_; exports.aktifkan_ = aktifkan_;
+  exports.tanggalStr_ = tanggalStr_; exports.bulanDari_ = bulanDari_;
+  exports.tambahSumber_ = tambahSumber_; exports.ubahSumber_ = ubahSumber_; exports.hapusSumber_ = hapusSumber_;
+  exports.pendapatan_ = pendapatan_; exports.plotAnggaran_ = plotAnggaran_; exports.perBulan_ = perBulan_;
+  exports.isTetap_ = isTetap_; exports.petaAnggaran_ = petaAnggaran_; exports.kelompokDari_ = kelompokDari_;
+  exports.pesanSumber_ = pesanSumber_; exports.pesanPlot_ = pesanPlot_; exports.bacaSumberDana_ = bacaSumberDana_;
   exports.pesanRingkasan_ = pesanRingkasan_; exports.pesanAnggaran_ = pesanAnggaran_; exports.pesanGrafik_ = pesanGrafik_;
   exports.pesanHutang_ = pesanHutang_; exports.pesanBantuan_ = pesanBantuan_; exports.kirimTelegram_ = kirimTelegram_;
   exports.rupiah_ = rupiah_;
@@ -138,13 +151,20 @@ const hasil = ctx.setup();
 ok(FAKE.getSheetByName('Transaksi') !== null, 'sheet Transaksi dibuat');
 ok(FAKE.getSheetByName('Hutang') !== null, 'sheet Hutang dibuat');
 ok(FAKE.getSheetByName('Anggaran') !== null, 'sheet Anggaran dibuat');
+ok(FAKE.getSheetByName('SumberDana') !== null, 'sheet SumberDana dibuat');
 const shTx = FAKE.getSheetByName('Transaksi');
 eq(shTx.getLastRow(), 1, 'Transaksi hanya berisi baris header');
 eq(String(shTx.cell(1, 1)), 'ID', 'kolom 1 header = ID');
 eq(String(shTx.cell(1, 5)), 'Jumlah', 'kolom 5 header = Jumlah');
-ok(FAKE.getSheetByName('Anggaran').getLastRow() >= 11, '10 anggaran default terisi');
+eq(FAKE.getSheetByName('Anggaran').getLastRow(), 1, 'Anggaran sengaja kosong (plot disusun dari sumber dana)');
+eq(FAKE.getSheetByName('SumberDana').getLastRow(), 1, 'SumberDana kosong menunggu diisi');
+ok(String(hasil).indexOf('tambahsumber') > -1, 'pesan setup menuntun ke /tambahsumber');
 const hdrRow = shTx.getRange(1, 1, 1, 10).getValues()[0];
 ok(hdrRow.every(h => String(h).trim() !== ''), '10 kolom header lengkap: ' + hdrRow.join('|'));
+const hdrSd = FAKE.getSheetByName('SumberDana').getRange(1, 1, 1, 8).getValues()[0];
+eq(hdrSd.join('|'), 'ID|Nama|Jenis|Jumlah|Frekuensi|TanggalMulai|Status|Catatan', 'header SumberDana lengkap');
+const hdrAng = FAKE.getSheetByName('Anggaran').getRange(1, 1, 1, 5).getValues()[0];
+eq(hdrAng.join('|'), 'Kategori|Limit|Periode|Kelompok|Persen', 'header Anggaran lengkap');
 
 console.log('\n=== 4. catatTransaksi_ : masuk & keluar ===');
 const t1 = ctx.catatTransaksi_({ tipe: 'keluar', jumlah: '25000', kategori: 'makan', catatan: 'nasi goreng' });
@@ -187,25 +207,34 @@ eq(rd.selisih, -11585000, 'defisit = -11.585.000');
 eq(rd.status, 'defisit', 'status = defisit');
 ok(ctx.pesanRingkasan_(rd).indexOf('Defisit') > -1, 'pesan laporan menandai Defisit');
 ok(ctx.pesanRingkasan_(rd).indexOf('⚠️ Defisit') > -1, 'pesan laporan memakai ikon peringatan');
-eq(rd.anggaran['Makan'], 1500000, 'anggaran default Makan = 1.500.000 tersambung');
+eq(rd.anggaran['Makan'], undefined, 'belum ada anggaran sebelum sumber dana didaftarkan');
 
 // filter bulan lain harus kosong
 const rLain = ctx.ringkasan_('2020-01');
 eq(rLain.pemasukan, 0, 'bulan tanpa data => pemasukan 0');
 eq(rLain.jumlahTransaksi, 0, 'bulan tanpa data => 0 transaksi');
 
-console.log('\n=== 6. Anggaran vs realisasi ===');
+console.log('\n=== 6. Setel satu pos anggaran (setAnggaran_) ===');
 const sa = ctx.setAnggaran_('Makan', '2jt');
 eq(sa.limit, 2000000, 'setAnggaran_ Makan 2jt -> 2000000');
-eq(sa.baru, false, 'kategori sudah ada => diperbarui, bukan baru');
+eq(sa.baru, true, 'kategori Makan belum ada => dibuat baru');
+eq(sa.kelompok, 'Kebutuhan', 'kelompok otomatis terisi Kebutuhan');
+const sa1b = ctx.setAnggaran_('Makan', '2,5jt');
+eq(sa1b.baru, false, 'set ulang Makan => diperbarui, bukan duplikat');
+eq(sa1b.limit, 2500000, 'limit Makan diperbarui jadi 2.500.000');
 const shAng = FAKE.getSheetByName('Anggaran');
-const rows = shAng.getRange(2, 1, shAng.getLastRow() - 1, 2).getValues();
+const rows = shAng.getRange(2, 1, shAng.getLastRow() - 1, 5).getValues();
 const makanRow = rows.filter(x => String(x[0]) === 'Makan');
 eq(makanRow.length, 1, 'tidak ada duplikat baris Makan');
-eq(Number(makanRow[0][1]), 2000000, 'nilai limit Makan di sheet = 2.000.000');
+eq(Number(makanRow[0][1]), 2500000, 'nilai limit Makan di sheet = 2.500.000');
+eq(String(makanRow[0][3]), 'Kebutuhan', 'kolom Kelompok terisi di sheet');
 const sa2 = ctx.setAnggaran_('Olahraga', '300rb');
-eq(sa2.baru, true, 'kategori baru => ditambahkan');
-ok(ctx.pesanAnggaran_(ctx.ringkasan_()).indexOf('█') > -1, 'pesan anggaran menampilkan progress bar');
+eq(sa2.baru, true, 'kategori bebas => ditambahkan apa adanya');
+eq(sa2.kategori, 'Olahraga', 'nama kategori bebas dipertahankan');
+const pesanAngKosong = ctx.pesanAnggaran_(ctx.ringkasan_());
+ok(pesanAngKosong.indexOf('Makan') > -1, 'pesan anggaran memuat pos yang sudah disetel');
+ok(pesanAngKosong.indexOf('KEBUTUHAN') > -1, 'pesan anggaran mengelompokkan pos');
+ctx.setAnggaran_('Makan', '1,2jt');
 
 console.log('\n=== 7. Hutang: tambah, bayar, lunas, validasi ===');
 const h1 = ctx.tambahHutang_({ nama: 'Budi', pokok: '5jt', cicilan: '500rb', tempo: '2026-12-31' });
@@ -363,6 +392,263 @@ eq(sumKat, apiFinal.pengeluaran, 'total per kategori == total pengeluaran');
 ok(apiFinal.rasioTabungan === apiFinal.selisih / apiFinal.pemasukan, 'rasio tabungan konsisten');
 ok(ctx.pesanRingkasan_(rFinal).length > 50, 'pesan laporan terbentuk utuh');
 ok(ctx.pesanBantuan_().indexOf('/setanggaran') > -1, 'bantuan mendokumentasikan /setanggaran');
+
+console.log('\n=== 12. Edit transaksi (ubahTransaksi_) & pemulihan ===');
+const tUbah = ctx.catatTransaksi_({ tipe: 'keluar', jumlah: '50rb', kategori: 'makan', catatan: 'awal', akun: 'Tunai' });
+eq(tUbah.Kategori, 'Makan', 'transaksi uji dibuat');
+const h1u = ctx.ubahTransaksi_(tUbah.ID, { jumlah: '75rb', kategori: 'transport', catatan: 'setelah edit', akun: 'GoPay' });
+eq(h1u.ID, tUbah.ID, 'ID tetap sama setelah edit');
+eq(h1u.sesudah.Jumlah, 75000, 'jumlah diperbarui jadi 75.000');
+eq(h1u.sesudah.Kategori, 'Transport', 'kategori dinormalisasi ulang jadi Transport');
+eq(h1u.sesudah.Catatan, 'setelah edit', 'catatan diperbarui');
+eq(h1u.sesudah.Akun, 'GoPay', 'akun diperbarui');
+eq(h1u.sesudah.Tipe, 'keluar', 'tipe tetap bila tidak dikirim');
+eq(h1u.sebelum.Jumlah, 50000, 'nilai sebelum tercatat untuk audit');
+const shTxE = FAKE.getSheetByName('Transaksi');
+const rowE = ctx.cariTransaksi_(tUbah.ID).row;
+eq(Number(rowE[4]), 75000, 'nilai di sheet ikut berubah');
+eq(String(rowE[3]), 'Transport', 'kategori di sheet ikut berubah');
+eq(String(rowE[5]), 'GoPay', 'akun di sheet ikut berubah');
+
+// ubah sebagian saja (partial patch) tidak merusak kolom lain
+const h2u = ctx.ubahTransaksi_(tUbah.ID, { catatan: 'hanya catatan' });
+eq(h2u.sesudah.Catatan, 'hanya catatan', 'patch sebagian mengubah catatan');
+eq(h2u.sesudah.Jumlah, 75000, 'kolom lain tidak ikut berubah');
+eq(h2u.sesudah.Akun, 'GoPay', 'akun tetap dari nilai sebelumnya');
+
+// ubah tipe -> kategori dinormalisasi ke daftar tipe baru
+const tMasuk = ctx.catatTransaksi_({ tipe: 'keluar', jumlah: '10rb', kategori: 'makan' });
+const h3u = ctx.ubahTransaksi_(tMasuk.ID, { tipe: 'masuk' });
+eq(h3u.sesudah.Tipe, 'masuk', 'tipe berubah jadi masuk');
+eq(h3u.sesudah.Kategori, 'Lain-lain', 'kategori "Makan" tidak valid untuk masuk -> Lain-lain');
+
+// validasi
+let ubahGagal = false;
+try { ctx.ubahTransaksi_(tUbah.ID, { jumlah: 'ngawur' }); } catch (e) { ubahGagal = /tidak valid/.test(e.message); }
+ok(ubahGagal, 'nominal tidak valid ditolak saat edit');
+let ubahNol = false;
+try { ctx.ubahTransaksi_(tUbah.ID, { jumlah: '0' }); } catch (e) { ubahNol = true; }
+ok(ubahNol, 'nominal 0 ditolak saat edit');
+let ubahHilang = false;
+try { ctx.ubahTransaksi_('TX-9999', { jumlah: '1rb' }); } catch (e) { ubahHilang = /tidak ditemukan/.test(e.message); }
+ok(ubahHilang, 'edit ID tidak dikenal ditolak');
+
+// aktifkan kembali
+const rBatalSebelum = ctx.ringkasan_();
+ctx.batalkan_(tUbah.ID);
+eq(ctx.ringkasan_().pengeluaran, rBatalSebelum.pengeluaran - 75000, 'transaksi batal keluar dari agregat');
+const idAktif = ctx.aktifkan_(tUbah.ID);
+eq(idAktif, tUbah.ID, 'aktifkan_ mengembalikan ID');
+eq(ctx.ringkasan_().pengeluaran, rBatalSebelum.pengeluaran, 'agregat kembali setelah dipulihkan');
+eq(String(FAKE.getSheetByName('Transaksi').cell(ctx.cariTransaksi_(tUbah.ID).idx + 2, 9)), 'aktif', 'status di sheet kembali "aktif"');
+
+// API endpoint baru
+const gUbah = JSON.parse(ctx.doGet({ parameter: { action: 'ubah', token: 'rahasia123', id: tUbah.ID, jumlah: '90rb' } }).getContent());
+eq(gUbah.ok, true, 'API action=ubah berhasil');
+eq(gUbah.data.sesudah.Jumlah, 90000, 'API ubah menerapkan nominal baru');
+const gPulih = JSON.parse(ctx.doGet({ parameter: { action: 'batal', token: 'rahasia123', id: tUbah.ID } }).getContent());
+eq(gPulih.ok, true, 'API action=batal berhasil');
+const gAktif = JSON.parse(ctx.doGet({ parameter: { action: 'aktifkan', token: 'rahasia123', id: tUbah.ID } }).getContent());
+eq(gAktif.ok, true, 'API action=aktifkan berhasil');
+const gAktifBad = JSON.parse(ctx.doGet({ parameter: { action: 'aktifkan', token: 'rahasia123', id: 'TX-9999' } }).getContent());
+eq(gAktifBad.ok, false, 'API aktifkan ID salah -> ok:false');
+
+// router Telegram: /edit, /aktifkan
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/edit ' + tUbah.ID + ' jumlah 120rb' } });
+ok(String(SENT[0].body).indexOf('diperbarui') > -1, '/edit mengonfirmasi perubahan');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/edit ' + tUbah.ID + ' jumlah' } });
+ok(String(SENT[0].body).indexOf('Format') > -1, '/edit tanpa nilai -> pesan format');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/batal ' + tUbah.ID } });
+ok(String(SENT[0].body).indexOf('dibatalkan') > -1, '/batal mengonfirmasi pembatalan');
+ok(String(SENT[0].body).indexOf('/aktifkan') > -1, '/batal menyarankan cara memulihkan');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/aktifkan ' + tUbah.ID } });
+ok(String(SENT[0].body).indexOf('diaktifkan kembali') > -1, '/aktifkan memulihkan transaksi');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/aktifkan' } });
+ok(String(SENT[0].body).indexOf('Format') > -1, '/aktifkan tanpa ID -> pesan format');
+
+// data transaksi yang dikirim ke dashboard menyertakan status
+const dashFinal = JSON.parse(ctx.doGet({ parameter: { action: 'dashboard', token: 'rahasia123' } }).getContent());
+ok(dashFinal.transaksi.every(x => x.status === 'aktif' || x.status === 'batal'), 'setiap transaksi punya status valid');
+ok(dashFinal.transaksi.every(x => typeof x.akun === 'string' && x.akun.length > 0), 'setiap transaksi punya akun');
+ok(dashFinal.transaksi.every(x => /^\d{4}-\d{2}-\d{2}$/.test(x.tanggal)), 'tanggal diformat YYYY-MM-DD');
+ok(dashFinal.hutang.every(h => h.tempo === '' || /^\d{4}-\d{2}-\d{2}$/.test(h.tempo)), 'tempo hutang diformat YYYY-MM-DD (kosong bila belum diisi)');
+
+console.log('\n=== 13. Sumber dana (gaji sebagai sumber utama) ===');
+eq(ctx.isTetap_('tetap'), true, 'isTetap_("tetap") = true');
+eq(ctx.isTetap_('tidak tetap'), false, 'isTetap_("tidak tetap") = false (bug pencocokan longgar)');
+eq(ctx.isTetap_('TIDAK TETAP'), false, 'isTetap_("TIDAK TETAP") = false');
+eq(ctx.isTetap_(''), false, 'isTetap_("") = false');
+
+eq(ctx.bacaSumberDana_().length, 0, 'belum ada sumber dana setelah setup');
+const p0 = ctx.pendapatan_({});
+eq(p0.total, 0, 'pendapatan kosong = 0');
+eq(p0.rincian.length, 0, 'rincian kosong');
+ok(ctx.pesanSumber_().indexOf('Belum ada sumber dana') > -1, 'pesan sumber memandu saat kosong');
+
+const sd1 = ctx.tambahSumber_({ nama: 'Gaji', jumlah: '8jt', jenis: 'tetap', frekuensi: 'bulanan' });
+eq(sd1.ID, 'SD-0001', 'ID sumber pertama = SD-0001');
+eq(sd1.Nama, 'Gaji', 'nama tersimpan');
+eq(sd1.Jenis, 'tetap', 'jenis tetap');
+eq(sd1.Jumlah, 8000000, 'jumlah 8jt = 8.000.000');
+eq(sd1.Frekuensi, 'bulanan', 'frekuensi bulanan');
+eq(sd1.Status, 'aktif', 'status aktif');
+
+const sd2 = ctx.tambahSumber_({ nama: 'Usaha', jumlah: '500rb', jenis: 'tidak tetap', frekuensi: 'bulanan' });
+eq(sd2.Jenis, 'tidak tetap', 'jenis tidak tetap tersimpan benar');
+eq(sd2.ID, 'SD-0002', 'ID kedua = SD-0002');
+const sd3 = ctx.tambahSumber_({ nama: 'Proyek', jumlah: '1jt', jenis: 'tidak tetap', frekuensi: 'tahunan' });
+eq(sd3.ID, 'SD-0003', 'ID ketiga = SD-0003');
+
+let sdGagal = false;
+try { ctx.tambahSumber_({ nama: 'X', jumlah: 'ngawur' }); } catch (e) { sdGagal = /tidak valid/.test(e.message); }
+ok(sdGagal, 'jumlah sumber tidak valid ditolak');
+
+console.log('\n=== 14. Konversi frekuensi ke bulanan ===');
+eq(ctx.perBulan_(1000000, 'bulanan'), 1000000, 'bulanan tetap');
+eq(ctx.perBulan_(100000, 'harian'), 3000000, 'harian x30');
+eq(Math.round(ctx.perBulan_(1000000, 'mingguan')), Math.round(1000000 * 52 / 12), 'mingguan x52/12');
+eq(ctx.perBulan_(12000000, 'tahunan'), 1000000, 'tahunan /12');
+eq(ctx.perBulan_(500000, 'ngawur'), 500000, 'frekuensi tak dikenal = bulanan');
+
+const pt = ctx.pendapatan_({ tetap: true });
+eq(pt.total, 8000000, 'pendapatan tetap = 8.000.000 (hanya Gaji)');
+eq(pt.rincian.length, 1, 'rincian tetap hanya 1 sumber');
+const ps = ctx.pendapatan_({});
+eq(ps.total, 8000000 + 500000 + Math.round(1000000 / 12), 'pendapatan total mencakup tidak tetap');
+eq(ps.rincian.length, 3, 'rincian total 3 sumber');
+
+console.log('\n=== 15. Plot anggaran dari sumber dana ===');
+let plotGagal = false;
+try { ctx.plotAnggaran_({ dasar: 'tetap' }); } catch (e) { plotGagal = false; }
+ok(!plotGagal, 'plot berhasil saat sumber tetap ada');
+
+const plot = ctx.plotAnggaran_({ dasar: 'tetap', tulis: true });
+eq(plot.dasar, 8000000, 'dasar plot = pendapatan tetap 8.000.000');
+eq(plot.dasarTetap, true, 'penanda dasar tetap');
+eq(plot.baris.length, 13, '13 pos anggaran terbentuk');
+eq(plot.total, 8000000, 'total plot sama dengan dasar (pembulatan tidak bocor)');
+
+// porsi 50/30/20
+const sumG = g => plot.baris.filter(b => b[3] === g).reduce((a, b) => a + b[1], 0);
+eq(sumG('Kebutuhan'), 4000000, 'kelompok Kebutuhan = 50% x 8jt = 4.000.000');
+eq(sumG('Keinginan'), 2400000, 'kelompok Keinginan = 30% x 8jt = 2.400.000');
+eq(sumG('Tabungan'), 1600000, 'kelompok Tabungan = 20% x 8jt = 1.600.000');
+eq(sumG('Kebutuhan') + sumG('Keinginan') + sumG('Tabungan'), 8000000, 'jumlah tiga kelompok = dasar');
+
+// Makan = 30/100 dari Kebutuhan
+const bMakan = plot.baris.find(b => b[0] === 'Makan');
+eq(bMakan[1], 1200000, 'Makan = 30% x 4jt = 1.200.000');
+eq(bMakan[3], 'Kebutuhan', 'Makan masuk kelompok Kebutuhan');
+eq(plot.baris.find(b => b[0] === 'Tabungan')[1], 800000, 'Tabungan = 50% x 1,6jt = 800.000');
+eq(plot.baris.find(b => b[0] === 'Dana Darurat')[1], 320000, 'Dana Darurat = 20% x 1,6jt = 320.000');
+eq(plot.baris.find(b => b[0] === 'Belanja')[1], 840000, 'Belanja = 35% x 2,4jt = 840.000');
+eq(plot.baris.find(b => b[0] === 'Cicilan')[1], 400000, 'Cicilan = 10% x 4jt = 400.000');
+
+// hasil tertulis ke sheet
+const shAng2 = FAKE.getSheetByName('Anggaran');
+eq(shAng2.getLastRow() - 1, 13, '13 baris anggaran tertulis di sheet');
+const angRows = shAng2.getRange(2, 1, 13, 5).getValues();
+ok(angRows.every(r => String(r[3]).length > 0), 'setiap baris punya kolom Kelompok');
+ok(angRows.every(r => Number(r[4]) > 0), 'setiap baris punya kolom Persen');
+eq(Number(angRows.reduce((a, r) => a + Number(r[1]), 0)), 8000000, 'jumlah limit di sheet = 8.000.000');
+
+// dasar 'semua' memakai seluruh pendapatan
+const plotSemua = ctx.plotAnggaran_({ dasar: 'semua' });
+eq(plotSemua.dasar, ps.total, 'dasar "semua" = pendapatan total');
+ok(plotSemua.dasar > plot.dasar, 'dasar semua lebih besar dari dasar tetap');
+
+// plot ikut berubah saat gaji naik
+ctx.ubahSumber_('SD-0001', { jumlah: '10jt' });
+const plot2 = ctx.plotAnggaran_({ dasar: 'tetap' });
+eq(plot2.dasar, 10000000, 'gaji naik -> dasar plot ikut naik');
+eq(plot2.baris.find(b => b[0] === 'Makan')[1], 1500000, 'Makan menyesuaikan jadi 1.500.000');
+ctx.ubahSumber_('SD-0001', { jumlah: '8jt' });
+
+// nonaktif -> keluar dari dasar
+ctx.ubahSumber_('SD-0002', { status: 'nonaktif' });
+eq(ctx.pendapatan_({}).total, 8000000 + Math.round(1000000 / 12), 'sumber nonaktif keluar dari total');
+eq(ctx.pendapatan_({ tetap: true }).total, 8000000, 'sumber nonaktif tidak memengaruhi dasar tetap');
+ctx.ubahSumber_('SD-0002', { status: 'aktif' });
+
+// tanpa sumber tetap -> error yang menjelaskan
+ctx.ubahSumber_('SD-0001', { jenis: 'tidak tetap' });
+let errPlot = '';
+try { ctx.plotAnggaran_({ dasar: 'tetap' }); } catch (e) { errPlot = e.message; }
+ok(/Belum ada sumber dana tetap/.test(errPlot), 'error jelas saat tidak ada sumber tetap: ' + errPlot.slice(0, 60));
+ctx.ubahSumber_('SD-0001', { jenis: 'tetap' });
+
+console.log('\n=== 16. Ringkasan membawa data sumber & plot ===');
+const rSrc = ctx.ringkasan_();
+eq(rSrc.pendapatanTetap, 8000000, 'ringkasan membawa pendapatanTetap');
+eq(rSrc.pendapatanTotal, ps.total, 'ringkasan membawa pendapatanTotal');
+eq(rSrc.dasarAnggaran, 8000000, 'dasarAnggaran = pendapatan tetap');
+eq(rSrc.rincianSumber.length, 3, 'rincianSumber terisi');
+ok(rSrc.petaAnggaran['Makan'] !== undefined, 'petaAnggaran memuat Makan');
+eq(rSrc.petaAnggaran['Makan'].kelompok, 'Kebutuhan', 'petaAnggaran memuat kelompok');
+eq(rSrc.petaAnggaran['Makan'].limit, 1200000, 'petaAnggaran memuat limit');
+eq(rSrc.anggaran['Makan'], 1200000, 'peta anggaran lama tetap kompatibel');
+ok(ctx.pesanAnggaran_(rSrc).indexOf('KEBUTUHAN') > -1, 'pesan anggaran menampilkan kelompok');
+ok(ctx.pesanAnggaran_(rSrc).indexOf('Plot Anggaran') > -1, 'pesan anggaran berjudul Plot Anggaran');
+ok(ctx.pesanSumber_().indexOf('Pendapatan tetap') > -1, 'pesan sumber menampilkan total pendapatan tetap');
+ok(ctx.pesanPlot_(plot).indexOf('50%') > -1, 'pesan plot menampilkan porsi 50%');
+
+console.log('\n=== 17. API & Telegram untuk sumber dana ===');
+const gSumber = JSON.parse(ctx.doGet({ parameter: { action: 'sumber', token: 'rahasia123' } }).getContent());
+eq(gSumber.ok, true, 'API action=sumber berhasil');
+eq(gSumber.data.length, 3, 'API mengembalikan 3 sumber');
+eq(gSumber.pendapatanTetap, 8000000, 'API mengembalikan pendapatan tetap');
+const gTambah = JSON.parse(ctx.doGet({ parameter: { action: 'tambahsumber', token: 'rahasia123',
+  nama: 'Freelance', jumlah: '2jt', jenis: 'tidak tetap', frekuensi: 'bulanan' } }).getContent());
+eq(gTambah.ok, true, 'API tambah sumber berhasil');
+eq(gTambah.data.ID, 'SD-0004', 'ID sumber baru = SD-0004');
+const gUbahSd = JSON.parse(ctx.doGet({ parameter: { action: 'ubahsumber', token: 'rahasia123',
+  id: 'SD-0004', jumlah: '3jt' } }).getContent());
+eq(gUbahSd.ok, true, 'API ubah sumber berhasil');
+eq(gUbahSd.data.Jumlah, 3000000, 'jumlah sumber diperbarui');
+const gPlot = JSON.parse(ctx.doGet({ parameter: { action: 'plotanggaran', token: 'rahasia123',
+  dasar: 'tetap', simpan: 'true' } }).getContent());
+eq(gPlot.ok, true, 'API plotanggaran berhasil');
+eq(gPlot.data.dasar, 8000000, 'API plot memakai dasar tetap');
+eq(gPlot.data.baris.length, 13, 'API mengembalikan 13 baris plot');
+const gHapusSd = JSON.parse(ctx.doGet({ parameter: { action: 'hapussumber', token: 'rahasia123', id: 'SD-0004' } }).getContent());
+eq(gHapusSd.ok, true, 'API hapus sumber berhasil');
+eq(ctx.bacaSumberDana_().length, 3, 'sumber kembali jadi 3 setelah dihapus');
+
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/sumber' } });
+ok(String(SENT[0].body).indexOf('Sumber Dana') > -1, '/sumber mengirim daftar');
+ok(String(SENT[0].body).indexOf('SD-0001') > -1, '/sumber menampilkan ID');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/tambahsumber Gaji 8jt tetap bulanan' } });
+ok(String(SENT[0].body).indexOf('ditambahkan') > -1, '/tambahsumber mengonfirmasi');
+ok(String(SENT[0].body).indexOf('/plotanggaran') > -1, '/tambahsumber menyarankan langkah berikutnya');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/tambahsumber Gaji' } });
+ok(String(SENT[0].body).indexOf('Format') > -1, '/tambahsumber tanpa jumlah -> pesan format');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/plotanggaran' } });
+ok(String(SENT[0].body).indexOf('Plot Anggaran Tersusun') > -1, '/plotanggaran mengirim hasil');
+ok(String(SENT[0].body).indexOf('Kebutuhan') > -1, '/plotanggaran menampilkan kelompok');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/ubahsumber SD-0001 jumlah 9jt' } });
+ok(String(SENT[0].body).indexOf('diperbarui') > -1, '/ubahsumber mengonfirmasi');
+ctx.ubahSumber_('SD-0001', { jumlah: '8jt' });
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/ubahsumber SD-0001' } });
+ok(String(SENT[0].body).indexOf('Format') > -1, '/ubahsumber tanpa nilai -> pesan format');
+SENT.length = 0;
+ctx.prosesTelegram_({ message: { chat: { id: 111 }, text: '/hapussumber' } });
+ok(String(SENT[0].body).indexOf('Format') > -1, '/hapussumber tanpa ID -> pesan format');
+
+// konsistensi plot dengan ringkasan setelah semua perubahan
+const rFinal2 = ctx.ringkasan_();
+const sumKatPlot = Object.keys(rFinal2.anggaran).reduce((a, k) => a + rFinal2.anggaran[k], 0);
+eq(sumKatPlot, rFinal2.pendapatanTetap, 'total anggaran == pendapatan tetap (dasar plot)');
 
 console.log('\n============================================');
 console.log('  HASIL: ' + pass + ' lulus, ' + fail + ' gagal');

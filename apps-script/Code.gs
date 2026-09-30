@@ -36,23 +36,37 @@ const API_TOKEN  = cfg_('API_TOKEN');
 const WEBHOOK_SECRET = cfg_('WEBHOOK_SECRET');
 const WEBAPP_URL = cfg_('WEBAPP_URL');
 
-const SH = { TX: 'Transaksi', DEBT: 'Hutang', BUDGET: 'Anggaran', SET: 'Pengaturan' };
+const SH = { SUMBER: 'SumberDana', TX: 'Transaksi', DEBT: 'Hutang',
+             BUDGET: 'Anggaran', SET: 'Pengaturan' };
 
 const HEADERS = {
+  SumberDana: ['ID', 'Nama', 'Jenis', 'Jumlah', 'Frekuensi', 'TanggalMulai', 'Status', 'Catatan'],
   Transaksi:  ['ID', 'Tanggal', 'Tipe', 'Kategori', 'Jumlah', 'Akun', 'Catatan', 'Sumber', 'Status', 'Dibuat'],
   Hutang:     ['ID', 'Nama', 'Pokok', 'Dibayar', 'Sisa', 'Cicilan', 'JatuhTempo', 'Status', 'Catatan'],
-  Anggaran:   ['Kategori', 'Limit', 'Periode'],
+  Anggaran:   ['Kategori', 'Limit', 'Periode', 'Kelompok', 'Persen'],
   Pengaturan: ['Key', 'Value']
 };
 
 const KATEGORI_KELUAR = ['Makan', 'Transport', 'Belanja', 'Tagihan', 'Kesehatan',
-                         'Pendidikan', 'Hiburan', 'Rumah', 'Cicilan', 'Lain-lain'];
+                         'Pendidikan', 'Hiburan', 'Rumah', 'Cicilan',
+                         'Tabungan', 'Investasi', 'Dana Darurat', 'Lain-lain'];
 const KATEGORI_MASUK  = ['Gaji', 'Bonus', 'Usaha', 'Investasi', 'Hadiah', 'Lain-lain'];
 
-const ANGGARAN_DEFAULT = {
-  Makan: 1500000, Transport: 600000, Belanja: 500000, Tagihan: 500000,
-  Kesehatan: 300000, Pendidikan: 300000, Hiburan: 200000, Rumah: 800000,
-  Cicilan: 1000000, 'Lain-lain': 200000
+/* Plot anggaran dikelompokkan agar mudah dibaca: kebutuhan / keinginan / tabungan. */
+const KELOMPOK = {
+  Kebutuhan: ['Makan', 'Transport', 'Tagihan', 'Kesehatan', 'Pendidikan', 'Rumah', 'Cicilan'],
+  Keinginan: ['Belanja', 'Hiburan', 'Lain-lain'],
+  Tabungan:  ['Tabungan', 'Investasi', 'Dana Darurat']
+};
+
+/* Porsi tiap kelompok dari total pendapatan tetap (aturan 50/30/20). */
+const PORSI = { Kebutuhan: 0.5, Keinginan: 0.3, Tabungan: 0.2 };
+
+/* Bobot antar kategori di dalam satu kelompok (jumlah 100). */
+const BOBOT = {
+  Kebutuhan: { Makan: 30, Transport: 15, Tagihan: 12, Kesehatan: 8, Pendidikan: 8, Rumah: 17, Cicilan: 10 },
+  Keinginan: { Belanja: 35, Hiburan: 40, 'Lain-lain': 25 },
+  Tabungan:  { Tabungan: 50, Investasi: 30, 'Dana Darurat': 20 }
 };
 
 /* ----------------------------- UTIL ----------------------------- */
@@ -65,7 +79,19 @@ function tanggalHariIni_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
-function bulanDari_(ymd) { return String(ymd || '').slice(0, 7); }
+function tanggalStr_(v) {
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(v == null ? '' : v).slice(0, 10);
+}
+
+function bulanDari_(v) {
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM');
+  }
+  return String(v || '').slice(0, 7);
+}
 
 function bulanIni_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
@@ -171,22 +197,17 @@ function tulis_(nama, objek) {
 function setup() {
   Object.keys(SH).forEach(function (k) { sheet_(SH[k]); });
 
-  // Anggaran default (hanya jika masih kosong)
-  const shAng = sheet_(SH.BUDGET);
-  if (shAng.getLastRow() < 2) {
-    const rows = Object.keys(ANGGARAN_DEFAULT).map(function (k) {
-      return [k, ANGGARAN_DEFAULT[k], 'bulanan'];
-    });
-    shAng.getRange(2, 1, rows.length, 3).setValues(rows);
-  }
+  // Anggaran TIDAK diisi default: plot disusun dari sumber dana (plotAnggaran_)
+  // supaya angka anggaran selalu punya dasar pendapatan nyata.
 
   const shSet = sheet_(SH.SET);
   if (shSet.getLastRow() < 2) {
-    shSet.getRange(2, 1, 2, 2).setValues([['dibuat', new Date().toISOString()], ['versi', '1.0']]);
+    shSet.getRange(2, 1, 2, 2).setValues([['dibuat', new Date().toISOString()], ['versi', '2.0']]);
   }
 
   SpreadsheetApp.getActive(); // no-op agar izin Sheets ter-trigger
-  return 'Setup selesai. Sheet: ' + Object.keys(SH).join(', ');
+  return 'Setup selesai. Sheet: ' + Object.keys(SH).join(', ') +
+    '\nLangkah berikutnya: tambah sumber dana lewat /tambahsumber, lalu susun plot dengan /plotanggaran.';
 }
 
 /* ----------------------------- TELEGRAM ----------------------------- */
@@ -298,14 +319,19 @@ function ringkasan_(bulan) {
       perKategori[k] = (perKategori[k] || 0) + j;
     }
   });
+  const petaAng = petaAnggaran_();
   const anggaran = {};
-  baca_(SH.BUDGET).forEach(function (r) { anggaran[r.Kategori] = Number(r.Limit) || 0; });
+  Object.keys(petaAng).forEach(function (k) { anggaran[k] = petaAng[k].limit; });
 
+  const pTetap = pendapatan_({ tetap: true });
+  const pSemua = pendapatan_({});
   const hutang = baca_(SH.DEBT).filter(function (r) { return String(r.Status) === 'aktif'; });
   const totalHutang = hutang.reduce(function (a, r) { return a + (Number(r.Sisa) || 0); }, 0);
+  const cicilanHutang = hutang.reduce(function (a, r) { return a + (Number(r.Cicilan) || 0); }, 0);
 
   const sisa = masuk - keluar;
   const rasioTabungan = masuk > 0 ? sisa / masuk : 0;
+  const dasar = pTetap.total || pSemua.total || masuk;
 
   return {
     bulan: b,
@@ -317,7 +343,13 @@ function ringkasan_(bulan) {
     rasioTabungan: rasioTabungan,
     perKategori: perKategori,
     anggaran: anggaran,
+    petaAnggaran: petaAng,
+    pendapatanTetap: pTetap.total,
+    pendapatanTotal: pSemua.total,
+    rincianSumber: pSemua.rincian,
+    dasarAnggaran: dasar,
     totalHutang: totalHutang,
+    cicilanHutang: cicilanHutang,
     jumlahTransaksi: tx.length,
     transaksi: tx
   };
@@ -374,16 +406,257 @@ function bayarHutang_(id, jumlah) {
   return { id: row[0], nama: row[1], dibayar: baruDibayar, sisa: baruSisa, lunas: baruSisa <= 0 };
 }
 
-function batalkan_(id) {
+function batalkan_(id, status) {
+  const target = String(status || 'batal').toLowerCase() === 'aktif' ? 'aktif' : 'batal';
   const sh = sheet_(SH.TX);
   const last = sh.getLastRow();
   if (last < 2) throw new Error('Belum ada transaksi.');
   const ids = sh.getRange(2, 1, last - 1, 1).getValues();
   const idx = ids.findIndex(function (r) { return String(r[0]).toLowerCase() === String(id).toLowerCase(); });
   if (idx === -1) throw new Error('Transaksi ' + id + ' tidak ditemukan.');
-  sh.getRange(idx + 2, 9).setValue('batal');
+  sh.getRange(idx + 2, 9).setValue(target);
   return String(ids[idx][0]);
 }
+
+/** Aktifkan kembali transaksi yang sebelumnya dibatalkan. */
+function aktifkan_(id) {
+  return batalkan_(id, 'aktif');
+}
+
+/** Cari baris transaksi -> { idx (0-based), row }. */
+function cariTransaksi_(id) {
+  const sh = sheet_(SH.TX);
+  const last = sh.getLastRow();
+  if (last < 2) throw new Error('Belum ada transaksi.');
+  const ids = sh.getRange(2, 1, last - 1, 1).getValues();
+  const idx = ids.findIndex(function (r) { return String(r[0]).toLowerCase() === String(id).toLowerCase(); });
+  if (idx === -1) throw new Error('Transaksi ' + id + ' tidak ditemukan.');
+  const row = sh.getRange(idx + 2, 1, 1, HEADERS.Transaksi.length).getValues()[0];
+  return { sh: sh, idx: idx, row: row, id: String(ids[idx][0]) };
+}
+
+/** Ubah transaksi yang sudah ada. Hanya kolom yang dikirim yang ditimpa. */
+function ubahTransaksi_(id, patch) {
+  const t = cariTransaksi_(id);
+  const lama = {
+    Tanggal: tanggalStr_(t.row[1]),
+    Tipe: String(t.row[2]).toLowerCase() === 'masuk' ? 'masuk' : 'keluar',
+    Kategori: String(t.row[3]),
+    Jumlah: Number(t.row[4]) || 0,
+    Akun: String(t.row[5]) || 'Tunai',
+    Catatan: String(t.row[6] || '')
+  };
+  const ada = function (k) { return patch && patch[k] !== undefined && patch[k] !== null && String(patch[k]) !== ''; };
+
+  const tipe = ada('tipe')
+    ? (String(patch.tipe).toLowerCase() === 'masuk' ? 'masuk' : 'keluar')
+    : lama.Tipe;
+
+  let jumlah = lama.Jumlah;
+  if (ada('jumlah')) {
+    jumlah = parseNominal_(patch.jumlah);
+    if (!jumlah || isNaN(jumlah) || jumlah <= 0) throw new Error('Nominal tidak valid: ' + patch.jumlah);
+  }
+
+  // Kategori: bila tipe berubah dan kategori tidak dikirim, paksa normalisasi ulang.
+  const kategori = normalKategori_(
+    ada('kategori') ? patch.kategori : lama.Kategori, tipe);
+
+  const baru = {
+    Tanggal: ada('tanggal') ? String(patch.tanggal).slice(0, 10) : lama.Tanggal,
+    Tipe: tipe,
+    Kategori: kategori,
+    Jumlah: jumlah,
+    Akun: ada('akun') ? String(patch.akun) : lama.Akun,
+    Catatan: ada('catatan') ? String(patch.catatan) : lama.Catatan
+  };
+
+  const lebar = HEADERS.Transaksi.length;
+  const rowBaru = t.row.slice();
+  rowBaru[1] = baru.Tanggal;
+  rowBaru[2] = baru.Tipe;
+  rowBaru[3] = baru.Kategori;
+  rowBaru[4] = baru.Jumlah;
+  rowBaru[5] = baru.Akun;
+  rowBaru[6] = baru.Catatan;
+  t.sh.getRange(t.idx + 2, 1, 1, lebar).setValues([rowBaru]);
+
+  return { ID: t.id, sebelum: lama, sesudah: baru };
+}
+
+/* ----------------------------- SUMBER DANA ----------------------------- */
+
+function bacaSumberDana_() {
+  return baca_(SH.SUMBER);
+}
+
+/** Normalisasi nominal sumber ke satuan BULAN. */
+/** 'tidak tetap' juga mengandung kata 'tetap' — pencocokan harus eksplisit. */
+function isTetap_(nilai) {
+  const j = String(nilai == null ? '' : nilai).toLowerCase().trim();
+  return j === 'tetap' || j === 'fixed' || j === 'rutin';
+}
+
+function perBulan_(jumlah, frekuensi) {
+  const j = Number(jumlah) || 0;
+  switch (String(frekuensi || 'bulanan').toLowerCase()) {
+    case 'harian':   return j * 30;
+    case 'mingguan': return j * 52 / 12;
+    case 'tahunan':  return j / 12;
+    default:         return j; // bulanan
+  }
+}
+
+function tambahSumber_(opts) {
+  const jumlah = parseNominal_(opts.jumlah);
+  if (jumlah == null || isNaN(jumlah) || jumlah <= 0) throw new Error('Jumlah sumber dana tidak valid.');
+  const daftar = bacaSumberDana_();
+  const id = idBaru_('SD', daftar);
+  const row = {
+    ID: id,
+    Nama: String(opts.nama || '').trim() || 'Tanpa nama',
+    Jenis: isTetap_(opts.jenis) ? 'tetap' : 'tidak tetap',
+    Jumlah: jumlah,
+    Frekuensi: String(opts.frekuensi || 'bulanan').toLowerCase(),
+    TanggalMulai: String(opts.mulai || tanggalHariIni_()).slice(0, 10),
+    Status: 'aktif',
+    Catatan: String(opts.catatan || '')
+  };
+  tulis_(SH.SUMBER, row);
+  return row;
+}
+
+function ubahSumber_(id, patch) {
+  const sh = sheet_(SH.SUMBER);
+  const last = sh.getLastRow();
+  if (last < 2) throw new Error('Belum ada sumber dana.');
+  const vals = sh.getRange(2, 1, last - 1, HEADERS.SumberDana.length).getValues();
+  const idx = vals.findIndex(function (r) { return String(r[0]).toLowerCase() === String(id).toLowerCase(); });
+  if (idx === -1) throw new Error('Sumber dana ' + id + ' tidak ditemukan.');
+  const row = vals[idx].slice();
+  const ada = function (k) { return patch && patch[k] !== undefined && patch[k] !== null && String(patch[k]) !== ''; };
+  if (ada('nama')) row[1] = String(patch.nama).trim();
+  if (ada('jenis')) row[2] = isTetap_(patch.jenis) ? 'tetap' : 'tidak tetap';
+  if (ada('jumlah')) {
+    const j = parseNominal_(patch.jumlah);
+    if (j == null || isNaN(j) || j <= 0) throw new Error('Jumlah sumber dana tidak valid.');
+    row[3] = j;
+  }
+  if (ada('frekuensi')) row[4] = String(patch.frekuensi).toLowerCase();
+  if (ada('mulai')) row[5] = String(patch.mulai).slice(0, 10);
+  if (ada('status')) row[6] = String(patch.status).toLowerCase() === 'nonaktif' ? 'nonaktif' : 'aktif';
+  if (ada('catatan')) row[7] = String(patch.catatan);
+  sh.getRange(idx + 2, 1, 1, HEADERS.SumberDana.length).setValues([row]);
+  return { ID: String(row[0]), Nama: String(row[1]), Jumlah: Number(row[3]), Frekuensi: String(row[4]), Status: String(row[6]) };
+}
+
+function hapusSumber_(id) {
+  const sh = sheet_(SH.SUMBER);
+  const last = sh.getLastRow();
+  if (last < 2) throw new Error('Belum ada sumber dana.');
+  const vals = sh.getRange(2, 1, last - 1, 1).getValues();
+  const idx = vals.findIndex(function (r) { return String(r[0]).toLowerCase() === String(id).toLowerCase(); });
+  if (idx === -1) throw new Error('Sumber dana ' + id + ' tidak ditemukan.');
+  sh.deleteRow(idx + 2);
+  return String(vals[idx][0]);
+}
+
+/**
+ * Total pendapatan bulanan dari sumber dana berstatus aktif.
+ * opts: { tetap: true } -> hanya jenis 'tetap'
+ */
+function pendapatan_(opts) {
+  const tetapSaja = opts && opts.tetap === true;
+  let total = 0;
+  const rincian = [];
+  bacaSumberDana_().forEach(function (s) {
+    if (String(s.Status).toLowerCase() === 'nonaktif') return;
+    const jenis = isTetap_(s.Jenis) ? 'tetap' : 'tidak tetap';
+    if (tetapSaja && jenis !== 'tetap') return;
+    const perBulan = perBulan_(s.Jumlah, s.Frekuensi);
+    total += perBulan;
+    rincian.push({ ID: s.ID, Nama: s.Nama, Jenis: jenis, Frekuensi: s.Frekuensi, Jumlah: Number(s.Jumlah) || 0, perBulan: Math.round(perBulan) });
+  });
+  return { total: Math.round(total), rincian: rincian };
+}
+
+/* ----------------------------- PLOT ANGGARAN ----------------------------- */
+
+/** Baca anggaran sebagai peta kategori -> {limit, kelompok, persen}. */
+function petaAnggaran_() {
+  const peta = {};
+  baca_(SH.BUDGET).forEach(function (r) {
+    const k = String(r.Kategori || '').trim();
+    if (!k) return;
+    peta[k] = {
+      limit: Number(r.Limit) || 0,
+      kelompok: String(r.Kelompok || kelompokDari_(k)),
+      persen: Number(r.Persen) || 0
+    };
+  });
+  return peta;
+}
+
+function kelompokDari_(kategori) {
+  for (const g in KELOMPOK) {
+    if (KELOMPOK[g].indexOf(kategori) > -1) return g;
+  }
+  return 'Lainnya';
+}
+
+/**
+ * Susun plot anggaran otomatis dari sumber dana.
+ * Dasar perhitungan: pendapatan TETAP bulanan (opsi tetapSaja), atau seluruh pendapatan.
+ * Aturan 50/30/20 -> dipecah ke kategori sesuai BOBOT.
+ *
+ * opts: { dasar: 'tetap'|'semua', tulis: true|false }
+ */
+function plotAnggaran_(opts) {
+  opts = opts || {};
+  const dasarTetap = String(opts.dasar || 'tetap').toLowerCase() !== 'semua';
+  const p = pendapatan_({ tetap: dasarTetap });
+  if (!p.total) {
+    throw new Error('Belum ada sumber dana ' + (dasarTetap ? 'tetap ' : '') +
+      'yang aktif. Tambah dulu dengan /tambahsumber Gaji 8jt tetap bulanan');
+  }
+  const dasar = p.total;
+
+  const hasil = {};
+  const baris = [];
+  Object.keys(KELOMPOK).forEach(function (g) {
+    const alokasi = Math.round(dasar * PORSI[g]);
+    const daftar = KELOMPOK[g];
+    const bobotTotal = daftar.reduce(function (a, k) { return a + (BOBOT[g][k] || 0); }, 0) || 1;
+    let terpakai = 0;
+    daftar.forEach(function (k, i) {
+      const w = BOBOT[g][k] || 0;
+      let nominal = Math.round(alokasi * w / bobotTotal / 1000) * 1000; // bulatkan ke ribuan
+      if (i === daftar.length - 1) nominal = alokasi - terpakai; // sisa pembulatan ke pos terakhir
+      terpakai += nominal;
+      const persen = Math.round(nominal / dasar * 1000) / 10;
+      hasil[k] = { limit: nominal, kelompok: g, persen: persen };
+      baris.push([k, nominal, 'bulanan', g, persen]);
+    });
+  });
+
+  if (opts.tulis === true) {
+    const sh = sheet_(SH.BUDGET);
+    const last = sh.getLastRow();
+    if (last >= 2) sh.getRange(2, 1, last - 1, HEADERS.Anggaran.length).clearContent();
+    sh.getRange(2, 1, baris.length, HEADERS.Anggaran.length).setValues(baris);
+  }
+
+  return {
+    dasar: dasar,
+    dasarTetap: dasarTetap,
+    pemasukan: p,
+    peta: hasil,
+    baris: baris,
+    total: baris.reduce(function (a, r) { return a + r[1]; }, 0)
+  };
+}
+
+/* ----------------------------- ANGGARAN ----------------------------- */
 
 function setAnggaran_(kategori, jumlah) {
   const j = parseNominal_(jumlah);
@@ -395,18 +668,22 @@ function setAnggaran_(kategori, jumlah) {
   // Kategori dikenal -> pakai nama kanonik. Kategori bebas -> simpan apa adanya
   // supaya tidak semua kategori baru menumpuk di "Lain-lain".
   const nama = (kanonik !== 'Lain-lain' || /^lain/i.test(mentah)) ? kanonik : (mentah || 'Lain-lain');
+  const dasar = pendapatan_({ tetap: true }).total || pendapatan_({}).total || 0;
+  const persen = dasar ? Math.round(j / dasar * 1000) / 10 : 0;
+  const kelompok = kelompokDari_(nama);
+
   if (last >= 2) {
     const vals = sh.getRange(2, 1, last - 1, 1).getValues();
     const idx = vals.findIndex(function (r) {
       return String(r[0]).trim().toLowerCase() === nama.toLowerCase();
     });
     if (idx > -1) {
-      sh.getRange(idx + 2, 2).setValue(j);
-      return { kategori: String(vals[idx][0]).trim(), limit: j, baru: false };
+      sh.getRange(idx + 2, 2, 1, 4).setValues([[j, 'bulanan', kelompok, persen]]);
+      return { kategori: String(vals[idx][0]).trim(), limit: j, kelompok: kelompok, persen: persen, baru: false };
     }
   }
-  sh.appendRow([nama, j, 'bulanan']);
-  return { kategori: nama, limit: j, baru: true };
+  sh.appendRow([nama, j, 'bulanan', kelompok, persen]);
+  return { kategori: nama, limit: j, kelompok: kelompok, persen: persen, baru: true };
 }
 
 /* ----------------------------- FORMAT PESAN ----------------------------- */
@@ -420,10 +697,22 @@ function pesanBantuan_() {
     '<code>/masuk 5jt gaji bulan ini</code>',
     '<code>/catat keluar 120000 transport bensin</code>',
     '',
+    '<b>Langkah 1 — sumber dana</b>',
+    '<code>/sumber</code> — daftar sumber dana &amp; total pendapatan',
+    '<code>/tambahsumber Gaji 8jt tetap bulanan</code>',
+    '<code>/tambahsumber Usaha 500rb harian</code>',
+    '<code>/ubahsumber SD-0001 jumlah 9jt</code>',
+    '<code>/hapussumber SD-0002</code>',
+    '',
+    '<b>Langkah 2 — plot anggaran</b>',
+    '<code>/plotanggaran</code> — susun otomatis dari pendapatan tetap (50/30/20)',
+    '<code>/plotanggaran semua</code> — pakai seluruh pendapatan',
+    '<code>/anggaran</code> — realisasi vs plot',
+    '<code>/setanggaran Makan 2jt</code> — ubah satu pos',
+    '',
     '<b>Laporan</b>',
     '<code>/lapor</code> — ringkasan bulan ini',
     '<code>/lapor 2026-08</code> — bulan tertentu',
-    '<code>/anggaran</code> — realisasi vs anggaran',
     '<code>/saldo</code> — pemasukan - pengeluaran',
     '<code>/grafik</code> — tren 6 bulan',
     '',
@@ -432,9 +721,11 @@ function pesanBantuan_() {
     '<code>/tambahhutang Budi 2jt 500rb 2026-12-31</code>',
     '<code>/bayar HT-0001 500rb</code>',
     '',
-    '<b>Lain-lain</b>',
-    '<code>/batal TX-0007</code> — batalkan transaksi',
-    '<code>/setanggaran Makan 1.5jt</code>',
+    '<b>Kelola transaksi</b>',
+    '<code>/edit TX-0007 jumlah 30rb</code> — ubah nominal',
+    '<code>/edit TX-0007 kategori Transport</code>',
+    '<code>/batal TX-0007</code> — batalkan (riwayat tetap ada)',
+    '<code>/aktifkan TX-0007</code> — pulihkan transaksi batal',
     '',
     'Nominal bebas: <code>25rb</code>, <code>1,5jt</code>, <code>1.500.000</code>, <code>50k</code>'
   ].join('\n');
@@ -470,28 +761,104 @@ function pesanRingkasan_(r) {
 }
 
 function pesanAnggaran_(r) {
-  const kat = Object.keys(r.anggaran).filter(function (k) { return r.anggaran[k] > 0; });
-  if (!kat.length) return 'Belum ada anggaran. Set dengan /setanggaran Makan 1.5jt';
-  const lines = ['<b>🎯 Anggaran ' + r.namaBulan + '</b>', ''];
-  let totalLimit = 0, totalPakai = 0;
-  kat.sort(function (a, b) {
-    const pa = (r.perKategori[a] || 0) / r.anggaran[a];
-    const pb = (r.perKategori[b] || 0) / r.anggaran[b];
-    return pb - pa;
-  }).forEach(function (k) {
-    const lim = r.anggaran[k];
-    const pakai = r.perKategori[k] || 0;
-    totalLimit += lim; totalPakai += pakai;
-    const pct = Math.round(pakai / lim * 100);
-    const penuh = Math.max(0, Math.min(10, Math.round(pct / 10)));
-    const bar = '█'.repeat(penuh) + '░'.repeat(10 - penuh);
-    lines.push(k + ' <code>' + bar + '</code> ' + pct + '%');
-    lines.push('   ' + rupiah_(pakai) + ' / ' + rupiah_(lim) +
-      (pakai > lim ? ' ⛔ lebih ' + rupiah_(pakai - lim) : ' sisa ' + rupiah_(lim - pakai)));
+  const peta = r.petaAnggaran || {};
+  const pk = r.perKategori || {};
+  const kat = Object.keys(peta).filter(function (k) { return peta[k].limit > 0; });
+  if (!kat.length) {
+    return '🎯 Belum ada plot anggaran.\n\nLangkah 1 — daftarkan sumber dana:\n<code>/tambahsumber Gaji 8jt tetap bulanan</code>\nLangkah 2 — susun plot otomatis:\n<code>/plotanggaran</code>';
+  }
+
+  const pendapatanTetap = r.pendapatanTetap || 0;
+  const lines = ['<b>🎯 Plot Anggaran ' + r.namaBulan + '</b>'];
+  if (pendapatanTetap > 0) lines.push('<i>Dasar: pendapatan tetap ' + rupiah_(pendapatanTetap) + '/bulan</i>');
+  lines.push('');
+
+  const urutan = ['Kebutuhan', 'Keinginan', 'Tabungan', 'Lainnya'];
+  let totLim = 0, totPak = 0;
+  urutan.forEach(function (g) {
+    const isi = kat.filter(function (k) { return peta[k].kelompok === g; });
+    if (!isi.length) return;
+    const limG = isi.reduce(function (a, k) { return a + peta[k].limit; }, 0);
+    const pakG = isi.reduce(function (a, k) { return a + (pk[k] || 0); }, 0);
+    totLim += limG; totPak += pakG;
+    const pctG = limG ? Math.round(pakG / limG * 100) : 0;
+    lines.push('<b>' + g.toUpperCase() + '</b> — ' + rupiah_(limG) +
+      ' (' + (pendapatanTetap ? Math.round(limG / pendapatanTetap * 100) : 0) + '% pendapatan) · terpakai ' + pctG + '%');
+    isi.sort(function (a, b) { return peta[b].limit - peta[a].limit; }).forEach(function (k) {
+      const lim = peta[k].limit;
+      const pak = pk[k] || 0;
+      const pct = lim ? Math.round(pak / lim * 100) : 0;
+      const penuh = Math.max(0, Math.min(10, Math.round(pct / 10)));
+      const bar = '█'.repeat(penuh) + '░'.repeat(10 - penuh);
+      lines.push('  ' + k + ' <code>' + bar + '</code> ' + pct + '%');
+      lines.push('     ' + rupiah_(pak) + ' / ' + rupiah_(lim) +
+        (pak > lim ? ' ⛔ lebih ' + rupiah_(pak - lim) : ' sisa ' + rupiah_(lim - pak)));
+    });
+    lines.push('');
+  });
+
+  lines.push('<b>TOTAL anggaran:</b> ' + rupiah_(totLim) + ' · terpakai ' + rupiah_(totPak) +
+    ' (' + (totLim ? Math.round(totPak / totLim * 100) : 0) + '%)');
+  if (pendapatanTetap > 0) {
+    const sisa = pendapatanTetap - totPak;
+    lines.push('Pendapatan tetap: ' + rupiah_(pendapatanTetap) + ' → ' +
+      (sisa >= 0 ? 'sisa ' + rupiah_(sisa) : '⛔ lewat ' + rupiah_(-sisa)));
+  }
+  return lines.join('\n');
+}
+
+/** Pesan hasil penyusunan plot anggaran. */
+function pesanPlot_(plot) {
+  const lines = [
+    '<b>📐 Plot Anggaran Tersusun</b>',
+    '',
+    'Dasar: pendapatan <b>' + (plot.dasarTetap ? 'tetap' : 'seluruh') + '</b> bulanan = <b>' + rupiah_(plot.dasar) + '</b>',
+    ''
+  ];
+  plot.pemasukan.rincian.forEach(function (s) {
+    lines.push('• ' + s.Nama + ' (' + s.Jenis + ', ' + s.Frekuensi + ') = ' + rupiah_(s.perBulan) + '/bln');
   });
   lines.push('');
-  lines.push('<b>Total:</b> ' + rupiah_(totalPakai) + ' / ' + rupiah_(totalLimit) +
-    ' (' + Math.round(totalPakai / totalLimit * 100) + '%)');
+  Object.keys(KELOMPOK).forEach(function (g) {
+    const isi = plot.baris.filter(function (b) { return b[3] === g; });
+    const total = isi.reduce(function (a, b) { return a + b[1]; }, 0);
+    lines.push('<b>' + g + '</b> — ' + rupiah_(total) + ' (' + Math.round(PORSI[g] * 100) + '%)');
+    isi.forEach(function (b) { lines.push('   ' + b[0] + ': ' + rupiah_(b[1]) + ' (' + b[4] + '%)'); });
+    lines.push('');
+  });
+  lines.push('<b>Total:</b> ' + rupiah_(plot.total) + '/bulan');
+  lines.push('<i>Ubah satu pos: /setanggaran Makan 2jt</i>');
+  return lines.join('\n');
+}
+
+function pesanSumber_() {
+  const daftar = bacaSumberDana_();
+  if (!daftar.length) {
+    return ['<b>💰 Sumber Dana</b>', '',
+      'Belum ada sumber dana. Tambahkan dulu:',
+      '<code>/tambahsumber Gaji 8jt tetap bulanan</code>',
+      '<code>/tambahsumber Usaha 500rb harian</code>',
+      '',
+      'Frekuensi: <code>bulanan</code>, <code>mingguan</code>, <code>harian</code>, <code>tahunan</code>',
+      'Jenis: <code>tetap</code> atau <code>tidak tetap</code>'
+    ].join('\n');
+  }
+  const p = pendapatan_({});
+  const pTetap = pendapatan_({ tetap: true });
+  const lines = ['<b>💰 Sumber Dana</b>', ''];
+  daftar.forEach(function (s) {
+    const nonaktif = String(s.Status).toLowerCase() === 'nonaktif';
+    lines.push((nonaktif ? '⏸️ ' : '✅ ') + '<b>' + s.ID + '</b> — ' + s.Nama +
+      (nonaktif ? ' <i>(nonaktif)</i>' : ''));
+    lines.push('   ' + s.Jenis + ' · ' + rupiah_(Number(s.Jumlah) || 0) + '/' + s.Frekuensi +
+      ' → <b>' + rupiah_(perBulan_(s.Jumlah, s.Frekuensi)) + '/bulan</b>');
+    if (s.TanggalMulai) lines.push('   mulai ' + tanggalStr_(s.TanggalMulai));
+  });
+  lines.push('');
+  lines.push('Pendapatan tetap  : <b>' + rupiah_(pTetap.total) + '/bulan</b>');
+  lines.push('Total pendapatan  : <b>' + rupiah_(p.total) + '/bulan</b>');
+  lines.push('');
+  lines.push('Susun plot anggaran: <code>/plotanggaran</code>');
   return lines.join('\n');
 }
 
@@ -536,7 +903,7 @@ function pesanHutang_() {
     lines.push('<b>' + r.ID + '</b> — ' + r.Nama);
     lines.push('   Sisa <b>' + rupiah_(sisa) + '</b> dari ' + rupiah_(pokok) + ' (' + pct + '% lunas)');
     if (Number(r.Cicilan) > 0) lines.push('   Cicilan ' + rupiah_(r.Cicilan) + '/bulan');
-    if (r.JatuhTempo) lines.push('   Tempo: ' + String(r.JatuhTempo).slice(0, 10));
+    if (r.JatuhTempo) lines.push('   Tempo: ' + tanggalStr_(r.JatuhTempo));
   });
   lines.push('');
   lines.push('<b>Total sisa:</b> ' + rupiah_(total));
@@ -585,6 +952,59 @@ function prosesTelegram_(update) {
       case 'laporan':
         kirimTelegram_(chatId, pesanRingkasan_(ringkasan_(args[0])));
         return;
+
+      case 'sumber':
+      case 'sumberdana':
+        kirimTelegram_(chatId, pesanSumber_());
+        return;
+
+      case 'tambahsumber':
+      case 'addsumber': {
+        if (args.length < 2) throw new Error(
+          'Format: /tambahsumber <nama> <jumlah> [tetap|tidak tetap] [frekuensi]\n' +
+          'Contoh: /tambahsumber Gaji 8jt tetap bulanan');
+        const s = tambahSumber_({
+          nama: args[0], jumlah: args[1],
+          jenis: args[2] || 'tetap',
+          frekuensi: args[3] || 'bulanan'
+        });
+        const p = pendapatan_({ tetap: true });
+        kirimTelegram_(chatId, [
+          '✅ Sumber dana <b>' + s.ID + '</b> ditambahkan',
+          '<b>' + s.Nama + '</b> — ' + s.Jenis + ' · ' + rupiah_(s.Jumlah) + '/' + s.Frekuensi +
+            ' = <b>' + rupiah_(perBulan_(s.Jumlah, s.Frekuensi)) + '/bulan</b>',
+          '',
+          'Pendapatan tetap bulanan: <b>' + rupiah_(p.total) + '</b>',
+          'Lanjut susun plot: <code>/plotanggaran</code>'
+        ].join('\n'));
+        return;
+      }
+
+      case 'ubahsumber': {
+        if (args.length < 3) throw new Error('Format: /ubahsumber <ID> <field> <nilai>\nfield: nama, jumlah, jenis, frekuensi, status, catatan');
+        const patch = {};
+        patch[args[1].toLowerCase()] = args.slice(2).join(' ');
+        const s = ubahSumber_(args[0], patch);
+        kirimTelegram_(chatId, '✏️ Sumber <b>' + s.ID + '</b> diperbarui: ' + s.Nama +
+          ' · ' + rupiah_(s.Jumlah) + '/' + s.Frekuensi + ' (' + s.Status + ')');
+        return;
+      }
+
+      case 'hapussumber':
+      case 'hapusumber': {
+        if (!args[0]) throw new Error('Format: /hapussumber <ID>');
+        const id = hapusSumber_(args[0]);
+        kirimTelegram_(chatId, '🗑️ Sumber dana <b>' + id + '</b> dihapus.');
+        return;
+      }
+
+      case 'plotanggaran':
+      case 'plot': {
+        const dasar = (args[0] || '').toLowerCase() === 'semua' ? 'semua' : 'tetap';
+        const plot = plotAnggaran_({ dasar: dasar, tulis: true });
+        kirimTelegram_(chatId, pesanPlot_(plot));
+        return;
+      }
 
       case 'anggaran':
       case 'budget':
@@ -643,7 +1063,37 @@ function prosesTelegram_(update) {
       case 'hapus': {
         if (!args[0]) throw new Error('Format: /batal <ID transaksi>');
         const id = batalkan_(args[0]);
-        kirimTelegram_(chatId, '🗑️ Transaksi <b>' + id + '</b> dibatalkan.');
+        kirimTelegram_(chatId, '🗑️ Transaksi <b>' + id + '</b> dibatalkan.\nPulihkan dengan <code>/aktifkan ' + id + '</code>');
+        return;
+      }
+
+      case 'aktifkan':
+      case 'pulihkan': {
+        if (!args[0]) throw new Error('Format: /aktifkan <ID transaksi>');
+        const id = aktifkan_(args[0]);
+        kirimTelegram_(chatId, '♻️ Transaksi <b>' + id + '</b> diaktifkan kembali.');
+        return;
+      }
+
+      case 'edit':
+      case 'ubah': {
+        if (args.length < 3) {
+          throw new Error('Format: /edit <ID> <field> <nilai>\nfield: jumlah, kategori, catatan, tanggal, tipe, akun');
+        }
+        const field = args[1].toLowerCase();
+        const nilai = args.slice(2).join(' ');
+        const patch = {};
+        patch[field] = nilai;
+        const h = ubahTransaksi_(args[0], patch);
+        const s = h.sesudah;
+        kirimTelegram_(chatId, [
+          '✏️ <b>' + h.ID + '</b> diperbarui',
+          'Tipe: <b>' + s.Tipe + '</b>',
+          'Kategori: <b>' + s.Kategori + '</b>',
+          'Jumlah: <b>' + rupiah_(s.Jumlah) + '</b>',
+          s.Catatan ? 'Catatan: ' + s.Catatan : '',
+          'Tanggal: ' + s.Tanggal
+        ].filter(Boolean).join('\n'));
         return;
       }
 
@@ -768,17 +1218,24 @@ function api_(req, params) {
         anggaran: r.anggaran,
         totalHutang: r.totalHutang,
         jumlahTransaksi: r.jumlahTransaksi,
+        pendapatanTetap: r.pendapatanTetap,
+        pendapatanTotal: r.pendapatanTotal,
+        dasarAnggaran: r.dasarAnggaran,
+        cicilanHutang: r.cicilanHutang,
+        rincianSumber: r.rincianSumber,
+        petaAnggaran: r.petaAnggaran,
         tren: tren,
         transaksi: r.transaksi.map(function (x) {
           return {
             id: x.ID,
-            tanggal: String(x.Tanggal).slice(0, 10),
+            tanggal: tanggalStr_(x.Tanggal),
             tipe: x.Tipe,
             kategori: x.Kategori,
             jumlah: Number(x.Jumlah) || 0,
-            akun: x.Akun,
-            catatan: x.Catatan,
-            sumber: x.Sumber
+            akun: x.Akun || 'Tunai',
+            catatan: x.Catatan || '',
+            sumber: x.Sumber || '',
+            status: String(x.Status) === 'batal' ? 'batal' : 'aktif'
           };
         }).sort(function (a, b) { return a.tanggal < b.tanggal ? 1 : -1; }),
         hutang: daftarHutang_().filter(function (x) { return String(x.Status) === 'aktif'; })
@@ -786,10 +1243,43 @@ function api_(req, params) {
             return {
               id: x.ID, nama: x.Nama, pokok: Number(x.Pokok) || 0,
               dibayar: Number(x.Dibayar) || 0, sisa: Number(x.Sisa) || 0,
-              cicilan: Number(x.Cicilan) || 0, tempo: String(x.JatuhTempo || '').slice(0, 10)
+              cicilan: Number(x.Cicilan) || 0, tempo: tanggalStr_(x.JatuhTempo),
+              catatan: x.Catatan || ''
             };
           })
       };
+    }
+
+    /* ---- sumber dana ---- */
+
+    case 'sumber':
+    case 'sumberdana':
+      return { ok: true, data: bacaSumberDana_(), pendapatan: pendapatan_({}), pendapatanTetap: pendapatan_({ tetap: true }).total };
+
+    case 'tambahsumber':
+      return {
+        ok: true,
+        data: tambahSumber_({
+          nama: params.nama, jumlah: params.jumlah,
+          jenis: params.jenis || 'tetap', frekuensi: params.frekuensi || 'bulanan',
+          mulai: params.mulai || '', catatan: params.catatan || ''
+        })
+      };
+
+    case 'ubahsumber':
+      return { ok: true, data: ubahSumber_(params.id, params) };
+
+    case 'hapussumber':
+      return { ok: true, data: hapusSumber_(params.id) };
+
+    /* ---- plot anggaran ---- */
+
+    case 'plotanggaran': {
+      const p = plotAnggaran_({
+        dasar: params.dasar || 'tetap',
+        tulis: String(params.simpan) === 'true' || String(params.simpan) === '1'
+      });
+      return { ok: true, data: { dasar: p.dasar, dasarTetap: p.dasarTetap, baris: p.baris, total: p.total } };
     }
 
     case 'transaksi':
@@ -823,9 +1313,17 @@ function api_(req, params) {
         })
       };
 
+    case 'ubah':
+    case 'edit':
+      return { ok: true, data: ubahTransaksi_(params.id, params) };
+
+    case 'aktifkan':
+    case 'restore':
+      return { ok: true, data: aktifkan_(params.id) };
+
     case 'batal':
     case 'hapus':
-      return { ok: true, data: batalkan_(params.id) };
+      return { ok: true, data: batalkan_(params.id, params.status) };
 
     case 'setanggaran':
       return { ok: true, data: setAnggaran_(params.kategori, params.jumlah) };

@@ -25,6 +25,10 @@ Telegram  ──webhook──▶  Apps Script (Code.gs)  ──▶  Google Sheet
 | 5. Defisit/surplus pendapatan vs pengeluaran | ✅ | KPI selisih, `/saldo`, `/lapor` |
 | 6. Hutang | ✅ | Sheet `Hutang`, `/hutang`, `/tambahhutang`, `/bayar`, tab Hutang |
 
+Tambahan di dashboard: **catat manual**, **pratinjau sebelum simpan**, **lihat/edit/batalkan
+transaksi** lewat modal, filter (tipe, status, akun, rentang tanggal), export CSV, dan tata letak
+**full-page** yang memakai seluruh lebar jendela.
+
 ## Struktur berkas
 
 ```
@@ -115,7 +119,10 @@ Konfigurasi disimpan di `localStorage` browser, jadi token tidak ikut ter-commit
 /hutang                             daftar hutang aktif
 /tambahhutang Budi 2jt 500rb 2026-12-31
 /bayar HT-0001 500rb                otomatis tercatat sebagai pengeluaran "Cicilan"
+/edit TX-0007 jumlah 30rb           ubah satu field (jumlah/kategori/catatan/tanggal/tipe/akun)
+/edit TX-0007 kategori Transport
 /batal TX-0007                      soft delete (riwayat tetap tersimpan)
+/aktifkan TX-0007                   pulihkan transaksi yang dibatalkan
 /setanggaran Makan 1.5jt
 /id                                 menampilkan chat ID Anda
 ```
@@ -124,9 +131,45 @@ Pengingat harian jam 20:00 (opsional): jalankan fungsi **`pasangPengingatHarian`
 
 ## Aksi yang tersedia di dashboard
 
-Catat transaksi · batalkan transaksi · tambah hutang · bayar cicilan · ubah anggaran ·
-pindah bulan · cari/filter transaksi · export CSV. Tanpa URL `/exec`, dashboard berjalan
-dalam **mode demo** dengan data contoh supaya tata letak tetap bisa diperiksa.
+| Tab | Bisa dilakukan |
+|---|---|
+| Dashboard | KPI bulan berjalan, tren 12 bulan (gridline + skala), **donut pengeluaran per kategori**, transaksi terakhir, catat cepat |
+| Sumber Dana | **Langkah 1** — daftar dari mana uang masuk (gaji sebagai sumber utama), KPI pendapatan tetap vs total, ubah/nonaktifkan/hapus, pratinjau per bulan |
+| Plot Anggaran | **Langkah 2** — susun anggaran otomatis dari pendapatan tetap (50/30/20), dikelompokkan Kebutuhan/Keinginan/Tabungan, realisasi vs limit, setel satu pos |
+| Transaksi | Catat manual (dengan **pratinjau** langsung), cari, filter tipe/status/akun/rentang tanggal, **Lihat**, **Edit**, **Batalkan**, **Pulihkan**, export CSV |
+| Hutang | Daftar hutang + progres pelunasan, tambah hutang, bayar cicilan |
+| Rencana | Alokasi 50/30/20, target dana darurat, rasio hutang, rekomendasi tindakan |
+
+### Alur pemakaian yang disarankan
+
+1. **Tab Sumber Dana** — daftarkan gaji (`8jt`, tetap, bulanan), lalu sumber lain bila ada.
+2. **Tab Plot Anggaran** — klik *Susun Ulang & Simpan*. Anggaran terisi otomatis dari pendapatan tetap.
+3. **Catat transaksi** lewat Telegram atau tab Transaksi. Realisasi langsung dibandingkan dengan plot.
+
+Kalau sumber dana belum ada, tab Plot menampilkan panel yang mengarahkan kembali ke langkah 1 —
+tidak ada alur buntu.
+
+### Desain
+
+- **Sistem token** di `:root` (warna, gradien, radius, bayangan, easing) — ubah satu variabel, seluruh
+  antarmuka ikut berubah.
+- Palet gelap navy dengan aksen gradien biru→ungu; kartu KPI punya garis aksen atas yang berubah warna
+  mengikuti status (hijau/biru/merah/kuning).
+- **Chart tren**: gridline 5 tingkat dengan label skala dibulatkan ke angka bulat, batang gradien,
+  tooltip berisi masuk/keluar/selisih, bulan terakhir ditandai.
+- **Donut kategori**: SVG murni (tanpa library), legenda dengan persentase dan penanda ⚠️/⛔ saat
+  melewati anggaran.
+- Navigasi bergaya segmented, header & nav lengket saat menggulir, modal dengan animasi,
+  `prefers`-friendly transisi, scrollbar kustom.
+
+Transaksi batal tidak dihapus: baris tetap ada, dicoret, dan bisa dipulihkan lewat tab Transaksi
+(filter status → **Dibatalkan** → **♻️ Pulihkan**) atau perintah `/aktifkan`.
+
+Tata letak memakai **seluruh lebar jendela** (tanpa batas `max-width`). Pada layar sempit grid
+otomatis turun menjadi satu kolom.
+
+Tanpa URL `/exec`, dashboard berjalan dalam **mode demo** dengan data contoh supaya tata letak
+tetap bisa diperiksa.
 
 ## Model data (Google Sheets)
 
@@ -149,9 +192,9 @@ npm test
 
 | Berkas | Cakupan |
 |---|---|
-| `tests/test-backend.js` | 139 asersi: parser nominal, kategori, setup sheet, transaksi, agregasi surplus/defisit, anggaran, hutang & pelunasan, soft delete, API `doGet`, router Telegram `doPost` |
-| `tests/test-dom.js` | 64 asersi: render KPI, chart, tabel, filter, pencarian, navigasi tab, form, toast |
-| `tests/test-live.js` | 46 asersi: bentuk permintaan bebas preflight CORS, render data API, aksi tulis, penanganan gagal koneksi |
+| `tests/test-backend.js` | 276 asersi: parser nominal, kategori, setup sheet, transaksi, agregasi surplus/defisit, sumber dana, konversi frekuensi, plot anggaran 50/30/20, hutang & pelunasan, edit/pulihkan, API `doGet`, router Telegram `doPost` |
+| `tests/test-dom.js` | 114 asersi: render KPI, chart + gridline, donut kategori, tabel, filter, pencarian, navigasi tab, form, toast |
+| `tests/test-live.js` | 109 asersi: bentuk permintaan bebas preflight CORS, render data API, aksi tulis, sumber dana & plot, penanganan gagal koneksi |
 
 ## Catatan teknis
 
