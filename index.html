@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UANGKU — Dashboard Keuangan</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#131c31; --card2:#18233d; --line:#24314f;
+    --tx:#e8edf7; --mut:#8ea0c4; --acc:#3b82f6; --ok:#22c55e; --bad:#ef4444;
+    --warn:#f59e0b; --pur:#8b5cf6;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+  a{color:var(--acc)}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px}
+
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .logo{font-size:20px;font-weight:700;letter-spacing:.5px}
+  .logo span{color:var(--acc)}
+  .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+    background:var(--card);border:1px solid var(--line);font-size:12px;color:var(--mut)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+  .dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(34,197,94,.15)}
+  .dot.off{background:var(--bad)}
+  .dot.demo{background:var(--warn)}
+
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);
+    background:var(--card2);color:var(--tx);padding:9px 14px;transition:.15s}
+  button:hover{border-color:var(--acc);transform:translateY(-1px)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  button.ghost{background:transparent}
+  button.mini{padding:5px 10px;font-size:12px}
+  button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+  nav{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:20px}
+  nav button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;
+    color:var(--mut);padding:10px 14px}
+  nav button:hover{color:var(--tx);transform:none}
+  nav button.active{color:var(--tx);border-bottom-color:var(--acc);font-weight:600}
+
+  .grid{display:grid;gap:14px}
+  .kpi{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+  .two{grid-template-columns:1.35fr 1fr}
+  @media(max-width:860px){.two{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+  .card h3{margin:0 0 12px;font-size:14px;font-weight:600;color:var(--mut);
+    text-transform:uppercase;letter-spacing:.6px}
+  .kpi .card{padding:14px 16px}
+  .kpi .lbl{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+  .kpi .val{font-size:23px;font-weight:700;margin-top:6px;letter-spacing:-.4px}
+  .kpi .sub{font-size:12px;color:var(--mut);margin-top:4px}
+  .val.ok{color:var(--ok)} .val.bad{color:var(--bad)} .val.warn{color:var(--warn)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;
+    letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid rgba(36,49,79,.5)}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:rgba(59,130,246,.06)}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+  .tag.masuk{background:rgba(34,197,94,.15);color:#4ade80}
+  .tag.keluar{background:rgba(239,68,68,.15);color:#f87171}
+
+  .bar{height:8px;background:var(--card2);border-radius:99px;overflow:hidden;margin-top:6px}
+  .bar > i{display:block;height:100%;border-radius:99px;background:var(--acc)}
+  .bar > i.ok{background:var(--ok)} .bar > i.warn{background:var(--warn)} .bar > i.bad{background:var(--bad)}
+
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;
+    border-bottom:1px solid rgba(36,49,79,.5)}
+  .row:last-child{border-bottom:none}
+  .row .nm{font-weight:600}
+  .row .mt{font-size:12px;color:var(--mut)}
+
+  .chart{display:flex;align-items:flex-end;gap:10px;height:170px;padding-top:10px}
+  .chart .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}
+  .chart .bars{flex:1;display:flex;align-items:flex-end;gap:3px;width:100%}
+  .chart .bars i{flex:1;border-radius:4px 4px 0 0;min-height:2px;display:block}
+  .chart .bars i.m{background:var(--ok)} .chart .bars i.k{background:var(--bad)}
+  .chart .cap{font-size:10px;color:var(--mut);white-space:nowrap}
+
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--mut);margin-top:10px}
+  .legend b{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+
+  label{display:block;font-size:12px;color:var(--mut);margin-bottom:5px;text-transform:uppercase;
+    letter-spacing:.4px}
+  input,select,textarea{width:100%;font:inherit;padding:10px 12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--card2);color:var(--tx)}
+  input:focus,select:focus{outline:none;border-color:var(--acc)}
+  .f{margin-bottom:12px}
+  .f2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .toast{position:fixed;right:18px;bottom:18px;background:var(--card2);border:1px solid var(--line);
+    border-left:4px solid var(--acc);padding:13px 16px;border-radius:12px;max-width:340px;
+    box-shadow:0 12px 32px rgba(0,0,0,.45);display:none;z-index:99}
+  .toast.err{border-left-color:var(--bad)} .toast.ok{border-left-color:var(--ok)}
+  .toast b{display:block;margin-bottom:3px}
+
+  .modal{position:fixed;inset:0;background:rgba(3,7,18,.75);display:none;align-items:center;
+    justify-content:center;padding:20px;z-index:100}
+  .modal.on{display:flex}
+  .modal .box{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:22px;max-width:520px;width:100%;max-height:90vh;overflow:auto}
+
+  .note{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:10px;
+    padding:11px 13px;font-size:12.5px;color:#bfdbfe;margin-bottom:14px}
+  .note.warn{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.3);color:#fcd34d}
+  .empty{color:var(--mut);text-align:center;padding:28px;font-size:13px}
+  .hide{display:none !important}
+  code{background:var(--card2);padding:2px 6px;border-radius:5px;font-size:12.5px;color:#93c5fd}
+  h2{font-size:17px;margin:0 0 4px} .sub2{color:var(--mut);font-size:13px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">UANG<span>KU</span></div>
+    <div class="pill" id="statusPill"><span class="dot" id="statusDot"></span><span id="statusTxt">memuat…</span></div>
+    <div class="spacer"></div>
+    <button class="ghost" id="btnBulan" title="Ganti bulan">📅 <span id="lblBulan">—</span></button>
+    <button class="ghost" id="btnSet">⚙️ Sumber Data</button>
+    <button class="primary" id="btnRefresh">↻ Muat Ulang</button>
+  </header>
+
+  <div id="banner"></div>
+
+  <nav>
+    <button data-tab="dash" class="active">📊 Dashboard</button>
+    <button data-tab="tx">🧾 Transaksi</button>
+    <button data-tab="debt">🏦 Hutang</button>
+    <button data-tab="budget">🎯 Anggaran</button>
+    <button data-tab="plan">📈 Rencana Keuangan</button>
+  </nav>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section id="tab-dash">
+    <div class="grid kpi" style="margin-bottom:14px">
+      <div class="card"><div class="lbl">Pemasukan</div><div class="val ok" id="kMasuk">—</div>
+        <div class="sub" id="kMasukSub">bulan ini</div></div>
+      <div class="card"><div class="lbl">Pengeluaran</div><div class="val bad" id="kKeluar">—</div>
+        <div class="sub" id="kKeluarSub">bulan ini</div></div>
+      <div class="card"><div class="lbl" id="kSelLbl">Selisih</div><div class="val" id="kSelisih">—</div>
+        <div class="sub" id="kSelSub">—</div></div>
+      <div class="card"><div class="lbl">Rasio Tabungan</div><div class="val" id="kRasio">—</div>
+        <div class="sub" id="kRasioSub">target ≥ 20%</div></div>
+      <div class="card"><div class="lbl">Sisa Hutang</div><div class="val warn" id="kHutang">—</div>
+        <div class="sub" id="kHutangSub">—</div></div>
+    </div>
+
+    <div class="grid two" style="margin-bottom:14px">
+      <div class="card">
+        <h3>Tren 12 Bulan</h3>
+        <div class="chart" id="chartTren"><div class="empty">Belum ada data</div></div>
+        <div class="legend">
+          <span><b style="background:var(--ok)"></b>Masuk</span>
+          <span><b style="background:var(--bad)"></b>Keluar</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Pengeluaran per Kategori</h3>
+        <div id="listKategori"><div class="empty">Belum ada data</div></div>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h3>Transaksi Terakhir</h3>
+        <div id="listTerakhir"><div class="empty">Belum ada data</div></div>
+      </div>
+      <div class="card">
+        <h3>Catat Cepat</h3>
+        <form id="formQuick">
+          <div class="f">
+            <label>Tipe</label>
+            <select id="qTipe">
+              <option value="keluar">⬇️ Pengeluaran</option>
+              <option value="masuk">⬆️ Pemasukan</option>
+            </select>
+          </div>
+          <div class="f2">
+            <div class="f"><label>Jumlah</label>
+              <input id="qJumlah" placeholder="25rb / 1,5jt / 150000" required></div>
+            <div class="f"><label>Tanggal</label><input id="qTanggal" type="date"></div>
+          </div>
+          <div class="f"><label>Kategori</label><select id="qKategori"></select></div>
+          <div class="f"><label>Catatan</label><input id="qCatatan" placeholder="opsional"></div>
+          <button class="primary" style="width:100%" type="submit">Simpan Transaksi</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TRANSAKSI ================= -->
+  <section id="tab-tx" class="hide">
+    <h2>Daftar Transaksi</h2>
+    <div class="sub2">Semua transaksi pada periode terpilih. Transaksi bisa dibatalkan (soft delete) tanpa menghapus riwayat.</div>
+    <div class="card">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <input id="cari" placeholder="🔎 Cari kategori / catatan / ID…" style="max-width:320px">
+        <select id="filterTipe" style="max-width:170px">
+          <option value="">Semua tipe</option>
+          <option value="masuk">Masuk</option>
+          <option value="keluar">Keluar</option>
+        </select>
+        <button class="ghost mini" id="btnCsv">⬇️ Export CSV</button>
+      </div>
+      <div style="overflow:auto"><table id="tblTx">
+        <thead><tr><th>ID</th><th>Tanggal</th><th>Tipe</th><th>Kategori</th><th>Catatan</th>
+          <th class="num">Jumlah</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ================= HUTANG ================= -->
+  <section id="tab-debt" class="hide">
+    <div class="grid two">
+      <div>
+        <h2>Hutang / Cicilan</h2>
+        <div class="sub2">Sisa hutang, progres pelunasan, dan pembayaran cicilan.</div>
+        <div class="card"><div id="listHutang"><div class="empty">Belum ada hutang</div></div></div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <h3>Tambah Hutang</h3>
+          <form id="formHutang">
+            <div class="f"><label>Nama / Kreditur</label><input id="hNama" placeholder="Budi / Bank ABC" required></div>
+            <div class="f2">
+              <div class="f"><label>Pokok</label><input id="hPokok" placeholder="2jt" required></div>
+              <div class="f"><label>Cicilan / bulan</label><input id="hCicilan" placeholder="500rb"></div>
+            </div>
+            <div class="f"><label>Jatuh Tempo</label><input id="hTempo" type="date"></div>
+            <button class="primary" style="width:100%">Simpan Hutang</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Bayar Cicilan</h3>
+          <form id="formBayar">
+            <div class="f"><label>Hutang</label><select id="bId"></select></div>
+            <div class="f"><label>Jumlah Bayar</label><input id="bJumlah" placeholder="500rb" required></div>
+            <div class="note">Pembayaran otomatis tercatat sebagai transaksi pengeluaran kategori <b>Cicilan</b>.</div>
+            <button class="primary" style="width:100%">Catat Pembayaran</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ANGGARAN ================= -->
+  <section id="tab-budget" class="hide">
+    <h2>Anggaran &amp; Realisasi</h2>
+    <div class="sub2">Bandingkan pengeluaran aktual terhadap batas anggaran bulanan.</div>
+    <div class="card" style="margin-bottom:14px">
+      <div id="listAnggaran"><div class="empty">Belum ada anggaran</div></div>
+    </div>
+    <div class="card">
+      <h3>Ubah / Tambah Anggaran</h3>
+      <form id="formAnggaran">
+        <div class="f2">
+          <div class="f"><label>Kategori</label><select id="aKategori"></select></div>
+          <div class="f"><label>Limit / bulan</label><input id="aLimit" placeholder="1.5jt" required></div>
+        </div>
+        <button class="primary">Simpan Anggaran</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= RENCANA ================= -->
+  <section id="tab-plan" class="hide">
+    <h2>Rencana Keuangan</h2>
+    <div class="sub2">Rekomendasi otomatis berdasarkan data aktual bulan terpilih.</div>
+    <div id="planBody"></div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Modal pengaturan -->
+<div class="modal" id="modal">
+  <div class="box">
+    <h2>Sumber Data</h2>
+    <div class="sub2">Hubungkan dashboard ke Google Apps Script Web App Anda.</div>
+    <div class="f">
+      <label>URL Web App (/exec)</label>
+      <input id="sUrl" placeholder="https://script.google.com/macros/s/AKfy…/exec">
+    </div>
+    <div class="f">
+      <label>API Token (opsional)</label>
+      <input id="sToken" placeholder="sama dengan Script Property API_TOKEN">
+    </div>
+    <div class="note">
+      Cara pakai: <code>Deploy &gt; New deployment &gt; Web app</code>, Execute as <b>Me</b>,
+      Who has access <b>Anyone</b>. Salin URL yang berakhiran <code>/exec</code>.
+      Setelah menambah transaksi di Telegram, klik <b>Muat Ulang</b>.
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="primary" id="sSave">Simpan &amp; Uji Koneksi</button>
+      <button class="ghost" id="sClose">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal bulan -->
+<div class="modal" id="modalBulan">
+  <div class="box">
+    <h2>Pilih Bulan</h2>
+    <div class="sub2">Periode yang ditampilkan pada dashboard.</div>
+    <div class="f"><input id="mBulan" type="month"></div>
+    <div style="display:flex;gap:10px">
+      <button class="primary" id="mOk">Terapkan</button>
+      <button class="ghost" id="mClose">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   KONFIG & STATE
+   ============================================================ */
+const LS = 'uangku.config.v1';
+const CAT_KELUAR = ['Makan','Transport','Belanja','Tagihan','Kesehatan','Pendidikan',
+                    'Hiburan','Rumah','Cicilan','Lain-lain'];
+const CAT_MASUK  = ['Gaji','Bonus','Usaha','Investasi','Hadiah','Lain-lain'];
+
+let CFG  = { url:'', token:'' };
+let DATA = null;          // payload dashboard
+let BULAN = '';           // 'YYYY-MM'
+let DEMO = false;
+
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+/* ============================================================
+   UTIL
+   ============================================================ */
+function rp(n){
+  n = Math.round(Number(n)||0);
+  return 'Rp ' + n.toLocaleString('id-ID');
+}
+function rpShort(n){
+  n = Number(n)||0; const a = Math.abs(n);
+  if (a >= 1e9) return (n/1e9).toFixed(1).replace('.',',') + ' M';
+  if (a >= 1e6) return (n/1e6).toFixed(a>=1e7?0:1).replace('.',',') + ' jt';
+  if (a >= 1e3) return Math.round(n/1e3) + ' rb';
+  return String(n);
+}
+function parseNominal(v){
+  if (typeof v === 'number') return Math.round(v);
+  let s = String(v==null?'':v).toLowerCase().replace(/rp\.?/g,'').replace(/[\s_]/g,'');
+  if (!s) return NaN;
+  let mult = 1;
+  const m = s.match(/^(.*?)(jt|juta|jtan|rb|ribu|k|mio|m)$/);
+  if (m){ s = m[1]; mult = /^(jt|juta|jtan|mio|m)$/.test(m[2]) ? 1e6 : 1e3; }
+  if (/^\d+[.,]\d{1,2}$/.test(s)) s = s.replace(',','.');
+  else s = s.replace(/[.,]/g,'');
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : Math.round(n*mult);
+}
+const BULAN_NAMA = ['Januari','Februari','Maret','April','Mei','Juni','Juli',
+                    'Agustus','September','Oktober','November','Desember'];
+function namaBulan(ym){
+  const p = String(ym||'').split('-'); if (p.length<2) return ym||'—';
+  return (BULAN_NAMA[Number(p[1])-1]||'?') + ' ' + p[0];
+}
+function bulanIni(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
+function tglHariIni(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function toast(msg, jenis){
+  const t = $('#toast');
+  t.className = 'toast ' + (jenis||'');
+  t.innerHTML = msg;
+  t.style.display = 'block';
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>{ t.style.display='none'; }, 4600);
+}
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============================================================
+   API — selalu GET + query string supaya TIDAK kena CORS preflight
+   ============================================================ */
+async function api(action, params){
+  params = params || {};
+  const qs = new URLSearchParams(Object.assign({ action: action, token: CFG.token || '' }, params));
+  const res = await fetch(CFG.url + '?' + qs.toString(), { method:'GET', redirect:'follow' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'API error');
+  return j;
+}
+
+/* ============================================================
+   DATA DEMO (dipakai saat belum ada URL terpasang)
+   ============================================================ */
+function demoData(bulan){
+  const b = bulan || bulanIni();
+  const p = b.split('-');
+  const mk = (m,masuk,keluar) => {
+    const t = p[0] + '-' + String(m).padStart(2,'0');
+    return { bulan:t, masuk:masuk, keluar:keluar, selisih:masuk-keluar };
+  };
+  const mi = Number(p[1]);
+  const tren = [];
+  for (let i=5;i>=0;i--){
+    const d = new Date(Number(p[0]), mi-1-i, 1);
+    const t = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const base = 8000000 + (i%3)*450000;
+    tren.push({ bulan:t, masuk:base, keluar:Math.round(base*(0.62+ (i%2)*0.09)), selisih:0 });
+  }
+  tren.forEach(x => x.selisih = x.masuk - x.keluar);
+  const cur = tren[tren.length-1];
+  const perKategori = { Makan:1850000, Transport:720000, Tagihan:640000,
+                        Belanja:410000, Rumah:900000, Hiburan:250000, 'Lain-lain':180000 };
+  const total = Object.values(perKategori).reduce((a,b2)=>a+b2,0);
+  cur.keluar = total;
+  const anggaran = { Makan:1500000, Transport:600000, Tagihan:500000, Belanja:500000,
+                     Rumah:800000, Hiburan:200000, Kesehatan:300000, Pendidikan:300000,
+                     Cicilan:1000000, 'Lain-lain':200000 };
+  const transaksi = [
+    { id:'TX-0009', tanggal:b+'-28', tipe:'masuk',  kategori:'Gaji',     jumlah:8500000, akun:'BCA',  catatan:'Gaji bulanan', sumber:'telegram' },
+    { id:'TX-0008', tanggal:b+'-27', tipe:'keluar', kategori:'Makan',    jumlah:45000,   akun:'Tunai',catatan:'nasi goreng', sumber:'telegram' },
+    { id:'TX-0007', tanggal:b+'-26', tipe:'keluar', kategori:'Tagihan',  jumlah:320000,  akun:'BCA',  catatan:'listrik', sumber:'telegram' },
+    { id:'TX-0006', tanggal:b+'-25', tipe:'keluar', kategori:'Cicilan',  jumlah:750000,  akun:'BCA',  catatan:'Bayar hutang Budi', sumber:'telegram' },
+    { id:'TX-0005', tanggal:b+'-24', tipe:'keluar', kategori:'Transport',jumlah:60000,   akun:'Tunai',catatan:'bensin', sumber:'web' },
+    { id:'TX-0004', tanggal:b+'-22', tipe:'masuk',  kategori:'Usaha',    jumlah:1250000, akun:'BCA',  catatan:'jualan online', sumber:'telegram' }
+  ];
+  return {
+    ok:true, bulan:b, namaBulan:namaBulan(b),
+    pemasukan: cur.masuk, pengeluaran: cur.keluar, selisih: cur.masuk-cur.keluar,
+    status: cur.masuk-cur.keluar >= 0 ? 'surplus':'defisit',
+    rasioTabungan: (cur.masuk-cur.keluar)/cur.masuk,
+    perKategori: perKategori, anggaran: anggaran,
+    totalHutang: 2250000, jumlahTransaksi: transaksi.length,
+    tren: tren, transaksi: transaksi,
+    hutang: [
+      { id:'HT-0001', nama:'Budi', pokok:5000000, dibayar:3500000, sisa:1500000, cicilan:500000, tempo:'2026-12-31' },
+      { id:'HT-0002', nama:'Kredit Laptop', pokok:12000000, dibayar:11250000, sisa:750000, cicilan:750000, tempo:'2027-03-01' }
+    ]
+  };
+}
+
+/* ============================================================
+   LOAD
+   ============================================================ */
+async function load(){
+  setStatus('memuat…','');
+  let d;
+  if (!CFG.url){
+    DEMO = true;
+    d = demoData(BULAN);
+    setStatus('mode demo','demo');
+  } else {
+    try{
+      d = await api('dashboard', { bulan: BULAN || bulanIni() });
+      DEMO = false;
+      setStatus('terhubung','on');
+    }catch(err){
+      DEMO = true;
+      d = demoData(BULAN);
+      setStatus('gagal konek — demo','off');
+      toast('<b>Gagal memuat data</b>' + esc(err.message) + '<br>Cek URL /exec di ⚙️ Sumber Data.', 'err');
+    }
+  }
+  DATA = d;
+  BULAN = d.bulan;
+  render();
+}
+
+function setStatus(txt, cls){
+  $('#statusTxt').textContent = txt;
+  $('#statusDot').className = 'dot ' + (cls||'');
+}
+
+function render(){
+  const d = DATA;
+  $('#lblBulan').textContent = d.namaBulan;
+
+  $('#banner').innerHTML = DEMO
+    ? '<div class="note warn"><b>Mode demo.</b> Data di bawah hanya contoh. Klik <b>⚙️ Sumber Data</b> dan masukkan URL Web App Apps Script untuk menampilkan data asli Anda.</div>'
+    : '';
+
+  /* ---- KPI ---- */
+  $('#kMasuk').textContent  = rp(d.pemasukan);
+  $('#kKeluar').textContent = rp(d.pengeluaran);
+  const sel = d.selisih;
+  const el = $('#kSelisih');
+  el.textContent = (sel>=0?'+':'−') + rp(Math.abs(sel));
+  el.className = 'val ' + (sel>0?'ok':sel<0?'bad':'');
+  $('#kSelLbl').textContent = sel>0 ? 'Surplus' : sel<0 ? 'Defisit' : 'Seimbang';
+  $('#kSelSub').textContent = sel>=0 ? 'dana tersisa bulan ini' : 'pengeluaran melebihi pemasukan';
+  const r = Number(d.rasioTabungan)||0;
+  $('#kRasio').textContent = (r*100).toFixed(1) + '%';
+  $('#kRasio').className = 'val ' + (r>=0.2?'ok':r>=0?'warn':'bad');
+  $('#kRasioSub').textContent = r>=0.2 ? 'sehat ✓' : r>=0 ? 'di bawah target' : 'defisit';
+  $('#kHutang').textContent = rp(d.totalHutang);
+  const nAktif = (d.hutang||[]).length;
+  $('#kHutangSub').textContent = nAktif ? nAktif + ' hutang aktif' : 'tidak ada hutang aktif';
+
+  renderTren(d);
+  renderKategori(d);
+  renderTerakhir(d);
+  renderTx(d);
+  renderHutang(d);
+  renderAnggaran(d);
+  renderPlan(d);
+  isiSelect();
+}
+
+/* ---- chart tren ---- */
+function renderTren(d){
+  const box = $('#chartTren');
+  const t = d.tren || [];
+  if (!t.length){ box.innerHTML = '<div class="empty">Belum ada data</div>'; return; }
+  const max = Math.max(1, ...t.map(x => Math.max(x.masuk, x.keluar)));
+  box.innerHTML = t.map(x=>{
+    const hm = Math.max(2, Math.round(x.masuk/max*100));
+    const hk = Math.max(2, Math.round(x.keluar/max*100));
+    const nm = namaBulan(x.bulan).split(' ')[0].slice(0,3);
+    const th = String(x.bulan).slice(2,4);
+    return '<div class="col" title="'+esc(namaBulan(x.bulan))+' • masuk '+rp(x.masuk)+' • keluar '+rp(x.keluar)+'">'
+      + '<div class="bars"><i class="m" style="height:'+hm+'%"></i><i class="k" style="height:'+hk+'%"></i></div>'
+      + '<div class="cap">'+esc(nm)+' '+esc(th)+'</div></div>';
+  }).join('');
+}
+
+/* ---- kategori ---- */
+function renderKategori(d){
+  const box = $('#listKategori');
+  const pk = d.perKategori || {};
+  const keys = Object.keys(pk).sort((a,b)=>pk[b]-pk[a]);
+  if (!keys.length){ box.innerHTML = '<div class="empty">Belum ada pengeluaran</div>'; return; }
+  const max = pk[keys[0]] || 1;
+  const total = keys.reduce((a,k)=>a+pk[k],0);
+  box.innerHTML = keys.map(k=>{
+    const v = pk[k];
+    const lim = (d.anggaran||{})[k] || 0;
+    const pctLim = lim ? Math.round(v/lim*100) : null;
+    const cls = pctLim===null ? '' : pctLim>100 ? 'bad' : pctLim>80 ? 'warn' : 'ok';
+    return '<div style="margin-bottom:11px">'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px">'
+      + '<span class="nm">'+esc(k)+'</span>'
+      + '<span class="num">'+rp(v)+' <span class="mt">('+Math.round(v/total*100)+'%)</span></span></div>'
+      + '<div class="bar"><i class="'+cls+'" style="width:'+Math.round(v/max*100)+'%"></i></div>'
+      + (pctLim!==null ? '<div class="mt" style="font-size:11px;color:var(--mut);margin-top:3px">'
+          + pctLim+'% dari anggaran '+rp(lim)+'</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+/* ---- transaksi terakhir ---- */
+function renderTerakhir(d){
+  const box = $('#listTerakhir');
+  const tx = (d.transaksi||[]).slice(0,7);
+  if (!tx.length){ box.innerHTML = '<div class="empty">Belum ada transaksi</div>'; return; }
+  box.innerHTML = tx.map(x=>{
+    const masuk = x.tipe === 'masuk';
+    return '<div class="row">'
+      + '<div><div class="nm">'+esc(x.kategori)+'</div>'
+      + '<div class="mt">'+esc(x.tanggal)+' · '+esc(x.id)+(x.catatan?' · '+esc(x.catatan):'')+'</div></div>'
+      + '<div class="num" style="color:'+(masuk?'var(--ok)':'var(--bad)')+';font-weight:600">'
+      + (masuk?'+':'−')+rp(x.jumlah)+'</div></div>';
+  }).join('');
+}
+
+/* ---- tabel transaksi ---- */
+function renderTx(d){
+  const cari = ($('#cari').value||'').toLowerCase();
+  const ft = $('#filterTipe').value;
+  let tx = (d.transaksi||[]).slice();
+  if (ft) tx = tx.filter(x=>x.tipe===ft);
+  if (cari) tx = tx.filter(x =>
+    String(x.kategori+x.catatan+x.id).toLowerCase().indexOf(cari) > -1);
+  const tb = $('#tblTx tbody');
+  if (!tx.length){
+    tb.innerHTML = '<tr><td colspan="7"><div class="empty">Tidak ada transaksi cocok</div></td></tr>';
+    return;
+  }
+  tb.innerHTML = tx.map(x=>{
+    const masuk = x.tipe==='masuk';
+    return '<tr><td><code>'+esc(x.id)+'</code></td><td>'+esc(x.tanggal)+'</td>'
+      + '<td><span class="tag '+(masuk?'masuk':'keluar')+'">'+(masuk?'MASUK':'KELUAR')+'</span></td>'
+      + '<td>'+esc(x.kategori)+'</td><td class="mt">'+esc(x.catatan||'—')+'</td>'
+      + '<td class="num" style="color:'+(masuk?'var(--ok)':'var(--bad)')+'">'
+      + (masuk?'+':'−')+rp(x.jumlah)+'</td>'
+      + '<td><button class="mini ghost" data-batal="'+esc(x.id)+'">Batalkan</button></td></tr>';
+  }).join('');
+}
+
+/* ---- hutang ---- */
+function renderHutang(d){
+  const box = $('#listHutang');
+  const hs = d.hutang || [];
+  if (!hs.length){ box.innerHTML = '<div class="empty">🎉 Tidak ada hutang aktif</div>'; return; }
+  box.innerHTML = hs.map(h=>{
+    const pct = h.pokok ? Math.round(h.dibayar/h.pokok*100) : 0;
+    const sisa = h.pokok - h.dibayar;
+    const bulanKe = h.cicilan > 0 ? Math.ceil(sisa/h.cicilan) : null;
+    const telat = h.tempo && h.tempo < tglHariIni();
+    return '<div style="margin-bottom:16px">'
+      + '<div style="display:flex;justify-content:space-between;gap:10px">'
+      + '<div><div class="nm">'+esc(h.nama)+' <span class="mt">'+esc(h.id)+'</span></div>'
+      + '<div class="mt">Sisa <b style="color:var(--warn)">'+rp(h.sisa)+'</b> dari '+rp(h.pokok)+'</div></div>'
+      + '<div class="num mt">'+pct+'% lunas</div></div>'
+      + '<div class="bar"><i class="ok" style="width:'+pct+'%"></i></div>'
+      + '<div class="mt" style="font-size:12px;margin-top:5px">'
+      + (h.cicilan ? 'Cicilan '+rp(h.cicilan)+'/bln' : 'Tanpa cicilan tetap')
+      + (bulanKe ? ' · ± '+bulanKe+' bulan lagi' : '')
+      + (h.tempo ? ' · tempo '+esc(h.tempo)+(telat?' ⚠️ lewat':'') : '')
+      + '</div></div>';
+  }).join('');
+}
+
+/* ---- anggaran ---- */
+function renderAnggaran(d){
+  const box = $('#listAnggaran');
+  const ang = d.anggaran || {};
+  const pk = d.perKategori || {};
+  const keys = Object.keys(ang).filter(k=>ang[k]>0);
+  if (!keys.length){ box.innerHTML = '<div class="empty">Belum ada anggaran</div>'; return; }
+  const totLim = keys.reduce((a,k)=>a+ang[k],0);
+  const totPak = keys.reduce((a,k)=>a+(pk[k]||0),0);
+  keys.sort((a,b)=>((pk[b]||0)/ang[b]) - ((pk[a]||0)/ang[a]));
+  box.innerHTML = keys.map(k=>{
+    const lim = ang[k], pak = pk[k]||0;
+    const pct = Math.round(pak/lim*100);
+    const cls = pct>100?'bad':pct>80?'warn':'ok';
+    const sisa = lim - pak;
+    return '<div style="margin-bottom:14px">'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px">'
+      + '<span class="nm">'+esc(k)+'</span>'
+      + '<span class="num">'+rp(pak)+' <span class="mt">/ '+rp(lim)+'</span> '
+      + '<b style="color:var(--'+(cls==='ok'?'ok':cls==='warn'?'warn':'bad')+')">'+pct+'%</b></span></div>'
+      + '<div class="bar"><i class="'+cls+'" style="width:'+Math.min(100,pct)+'%"></i></div>'
+      + '<div class="mt" style="font-size:11.5px;margin-top:3px">'
+      + (sisa>=0 ? 'Sisa '+rp(sisa) : '⛔ Lebih '+rp(-sisa))+'</div></div>';
+  }).join('')
+  + '<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:12px;display:flex;'
+  + 'justify-content:space-between;font-weight:600"><span>TOTAL</span>'
+  + '<span class="num">'+rp(totPak)+' / '+rp(totLim)+' ('+Math.round(totPak/totLim*100)+'%)</span></div>';
+}
+
+/* ---- rencana keuangan ---- */
+function renderPlan(d){
+  const masuk = Number(d.pemasukan)||0;
+  const keluar = Number(d.pengeluaran)||0;
+  const sel = masuk - keluar;
+  const rasio = masuk ? sel/masuk : 0;
+  const hutang = Number(d.totalHutang)||0;
+  const cicilan = (d.hutang||[]).reduce((a,h)=>a+(Number(h.cicilan)||0),0);
+  const pk = d.perKategori||{};
+  const keys = Object.keys(pk).sort((a,b)=>pk[b]-pk[a]);
+  const totKat = keys.reduce((a,k)=>a+pk[k],0) || 1;
+
+  // target 50/30/20
+  const kebutuhan = Math.round(masuk*0.5), keinginan = Math.round(masuk*0.3), tabungan = Math.round(masuk*0.2);
+  // dana darurat = 6x pengeluaran bulanan
+  const darurat = keluar*6;
+  const daruratTerkumpul = Math.max(0, sel) ; // proxy: surplus berjalan
+  const bulanDarurat = sel>0 ? Math.ceil(Math.max(0,darurat-daruratTerkumpul)/sel) : null;
+
+  const status = sel>0 ? 'surplus' : sel<0 ? 'defisit' : 'seimbang';
+  const warna = sel>0?'var(--ok)':sel<0?'var(--bad)':'var(--warn)';
+
+  let saran = [];
+  if (sel < 0){
+    saran.push({ t:'Perbaiki defisit', d:'Pengeluaran melebihi pemasukan sebesar '+rp(-sel)+
+      ' ('+Math.abs(rasio*100).toFixed(0)+'% dari pemasukan). Pangkas kategori terbesar di bawah minimal 15%.', p:'bad' });
+  } else if (rasio < 0.2){
+    saran.push({ t:'Tingkatkan rasio tabungan', d:'Rasio tabungan '+ (rasio*100).toFixed(1)+
+      '%, target minimal 20% ('+rp(Math.round(masuk*0.2))+'/bulan). Selisih kekurangan: '+
+      rp(Math.round(masuk*0.2 - sel))+'/bulan.', p:'warn' });
+  } else {
+    saran.push({ t:'Keuangan sehat', d:'Rasio tabungan '+ (rasio*100).toFixed(1)+
+      '%. Alokasikan surplus ke dana darurat lalu instrumen investasi.', p:'ok' });
+  }
+  if (hutang > 0){
+    saran.push({ t:'Prioritas pelunasan hutang',
+      d:'Sisa hutang '+rp(hutang)+(cicilan?' dengan cicilan '+rp(cicilan)+'/bulan':'')+
+      '. Rasio hutang terhadap pemasukan bulanan '+(masuk?Math.round(hutang/masuk*100):0)+
+      '%. Gunakan metode <b>debt snowball</b>: lunasi hutang terkecil dulu untuk momentum, atau '+
+      '<b>avalanche</b>: lunasi bunga tertinggi dulu untuk hemat biaya.', p:'warn' });
+  }
+  if (keluar > 0){
+    saran.push({ t:'Dana darurat',
+      d:'Target ideal 6× pengeluaran bulanan = '+rp(darurat)+'. '+
+      (sel>0 ? 'Dengan surplus '+rp(sel)+'/bulan, target tercapai dalam ± '+bulanDarurat+' bulan.'
+             : 'Belum ada surplus untuk mengalokasikan dana darurat — fokus pada perbaikan arus kas dulu.'), p:'info' });
+  }
+  if (keys.length){
+    const top = keys.slice(0,3);
+    saran.push({ t:'Tiga pengeluaran terbesar',
+      d: top.map(k=>'<b>'+esc(k)+'</b> '+rp(pk[k])+' ('+Math.round(pk[k]/totKat*100)+'%)').join(' · ')+
+      '. Memotong 10% dari tiga pos ini menghemat '+rp(Math.round(top.reduce((a,k)=>a+pk[k],0)*0.1))+'/bulan.', p:'info' });
+  }
+
+  $('#planBody').innerHTML = `
+  <div class="grid kpi" style="margin-bottom:14px">
+    <div class="card"><div class="lbl">Status Arus Kas</div>
+      <div class="val" style="color:${warna};text-transform:capitalize">${status}</div>
+      <div class="sub">${rp(sel)} bulan ini</div></div>
+    <div class="card"><div class="lbl">Rasio Tabungan</div>
+      <div class="val" style="color:${rasio>=0.2?'var(--ok)':rasio>=0?'var(--warn)':'var(--bad)'}">${(rasio*100).toFixed(1)}%</div>
+      <div class="sub">target ≥ 20%</div></div>
+    <div class="card"><div class="lbl">Rasio Hutang</div>
+      <div class="val">${masuk?Math.round(hutang/masuk*100):0}%</div>
+      <div class="sub">ideal &lt; 30%</div></div>
+    <div class="card"><div class="lbl">Estimasi Bebas Hutang</div>
+      <div class="val">${hutang>0 && cicilan>0 ? Math.ceil(hutang/cicilan)+' bln' : hutang>0 ? '—' : 'Bebas ✓'}</div>
+      <div class="sub">${cicilan?rp(cicilan)+'/bulan':''}</div></div>
+  </div>
+
+  <div class="grid two" style="margin-bottom:14px">
+    <div class="card">
+      <h3>Alokasi Ideal 50 / 30 / 20</h3>
+      <div class="sub2" style="margin-bottom:14px">Aturan umum: 50% kebutuhan pokok, 30% keinginan, 20% tabungan &amp; investasi.</div>
+      ${[['Kebutuhan pokok (50%)',kebutuhan,kebutuhan,masuk, 'var(--acc)'],
+         ['Keinginan (30%)',keinginan,keinginan,masuk,'var(--pur)'],
+         ['Tabungan &amp; investasi (20%)',tabungan,tabungan,masuk,'var(--ok)']]
+        .map(([lbl,val,,ms,cl])=>`
+        <div style="margin-bottom:13px">
+          <div style="display:flex;justify-content:space-between;font-size:13px">
+            <span>${lbl}</span><span class="num">${rp(val)}</span></div>
+          <div class="bar"><i style="width:${Math.round(val/ms*100)}%;background:${cl}"></i></div>
+        </div>`).join('')}
+      <div class="note" style="margin:14px 0 0">
+        Aktual Anda — kebutuhan + keinginan: <b>${rp(keluar)}</b> (${masuk?Math.round(keluar/masuk*100):0}% dari pemasukan),
+        tabungan: <b>${rp(Math.max(0,sel))}</b> (${(Math.max(0,rasio)*100).toFixed(1)}%).
+        ${keluar > kebutuhan+keinginan ? '⚠️ Pengeluaran melebihi alokasi ideal.' : '✓ Pengeluaran masih dalam alokasi ideal.'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Rekomendasi Tindakan</h3>
+      ${saran.map(s=>{
+        const c = s.p==='ok'?'var(--ok)':s.p==='bad'?'var(--bad)':s.p==='warn'?'var(--warn)':'var(--acc)';
+        return `<div style="border-left:3px solid ${c};padding:2px 0 2px 12px;margin-bottom:14px">
+          <div style="font-weight:600">${esc(s.t)}</div>
+          <div class="mt" style="font-size:12.5px;color:var(--mut)">${s.d}</div></div>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Langkah Berikutnya</h3>
+    <ol style="margin:0;padding-left:20px;color:var(--mut);font-size:13px;line-height:1.9">
+      <li>Catat setiap transaksi lewat Telegram agar data bulan ini akurat.</li>
+      <li>Set anggaran per kategori di tab <b>Anggaran</b> sesuai pemasukan bulan ini.</li>
+      <li>${hutang>0?'Alokasikan minimal '+rp(cicilan||Math.round(hutang/12))+'/bulan untuk pelunasan hutang.':'Pertahankan tanpa hutang konsumtif baru.'}</li>
+      <li>Bangun dana darurat sampai ${rp(darurat)} (6× pengeluaran bulanan) sebelum investasi agresif.</li>
+      <li>Setelah dana darurat aman, alokasikan 20% pemasukan ke investasi rutin.</li>
+    </ol>
+  </div>`;
+}
+
+/* ---- select options ---- */
+function isiSelect(){
+  const d = DATA;
+  const ang = (d && d.anggaran) || {};
+  const isi = (sel, list) => {
+    const cur = sel.value;
+    sel.innerHTML = list.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('');
+    if (list.indexOf(cur) > -1) sel.value = cur;
+  };
+  const tipe = $('#qTipe').value;
+  isi($('#qKategori'), tipe==='masuk' ? CAT_MASUK : CAT_KELUAR);
+  const semuaKat = Array.from(new Set(CAT_KELUAR.concat(CAT_MASUK).concat(Object.keys(ang))));
+  isi($('#aKategori'), semuaKat);
+  const hs = (d && d.hutang) || [];
+  const selB = $('#bId');
+  const curB = selB.value;
+  selB.innerHTML = hs.length
+    ? hs.map(h=>'<option value="'+esc(h.id)+'">'+esc(h.id)+' — '+esc(h.nama)+' (sisa '+rp(h.sisa)+')</option>').join('')
+    : '<option value="">— tidak ada hutang aktif —</option>';
+  if (curB) selB.value = curB;
+}
+
+/* ============================================================
+   AKSI
+   ============================================================ */
+async function aksi(action, params, sukses){
+  if (DEMO){
+    toast('<b>Mode demo</b>Data tidak tersimpan. Hubungkan URL Web App di ⚙️ Sumber Data dulu.','err');
+    return false;
+  }
+  try{
+    const j = await api(action, params);
+    toast('<b>'+(sukses||'Berhasil')+'</b>' + (j.data && j.data.ID ? 'ID: '+esc(j.data.ID) : ''), 'ok');
+    await load();
+    return true;
+  }catch(err){
+    toast('<b>Gagal</b>' + esc(err.message), 'err');
+    return false;
+  }
+}
+
+/* ============================================================
+   EVENT
+   ============================================================ */
+$$('nav button').forEach(b => b.onclick = () => {
+  $$('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['dash','tx','debt','budget','plan'].forEach(t =>
+    $('#tab-'+t).classList.toggle('hide', t !== b.dataset.tab));
+});
+
+$('#btnRefresh').onclick = load;
+
+$('#btnSet').onclick = () => {
+  $('#sUrl').value = CFG.url; $('#sToken').value = CFG.token;
+  $('#modal').classList.add('on');
+};
+$('#sClose').onclick = () => $('#modal').classList.remove('on');
+$('#sSave').onclick = async () => {
+  const url = $('#sUrl').value.trim();
+  CFG = { url: url, token: $('#sToken').value.trim() };
+  localStorage.setItem(LS, JSON.stringify(CFG));
+  if (!url){ $('#modal').classList.remove('on'); load(); return; }
+  try{
+    const j = await api('ping', {});
+    toast('<b>Koneksi berhasil ✓</b>Server waktu: '+esc(j.waktu), 'ok');
+    $('#modal').classList.remove('on');
+    load();
+  }catch(err){
+    toast('<b>Koneksi gagal</b>'+esc(err.message)+'<br>Pastikan deploy Web app = <b>Anyone</b>.','err');
+  }
+};
+
+$('#btnBulan').onclick = () => { $('#mBulan').value = BULAN || bulanIni(); $('#modalBulan').classList.add('on'); };
+$('#mClose').onclick = () => $('#modalBulan').classList.remove('on');
+$('#mOk').onclick = () => {
+  BULAN = $('#mBulan').value || bulanIni();
+  $('#modalBulan').classList.remove('on');
+  load();
+};
+
+$('#qTipe').onchange = () => isiSelect();
+$('#cari').oninput = () => DATA && renderTx(DATA);
+$('#filterTipe').onchange = () => DATA && renderTx(DATA);
+
+$('#formQuick').onsubmit = async e => {
+  e.preventDefault();
+  const jumlah = parseNominal($('#qJumlah').value);
+  if (!jumlah || isNaN(jumlah) || jumlah <= 0){ toast('<b>Nominal tidak valid</b>Contoh: 25rb, 1,5jt, 150000','err'); return; }
+  const ok = await aksi('catat', {
+    tipe: $('#qTipe').value, jumlah: jumlah, kategori: $('#qKategori').value,
+    catatan: $('#qCatatan').value, tanggal: $('#qTanggal').value || tglHariIni()
+  }, 'Transaksi tersimpan');
+  if (ok){ $('#qJumlah').value=''; $('#qCatatan').value=''; }
+};
+
+$('#formHutang').onsubmit = async e => {
+  e.preventDefault();
+  const pokok = parseNominal($('#hPokok').value);
+  if (!pokok || isNaN(pokok)){ toast('<b>Pokok tidak valid</b>','err'); return; }
+  const ok = await aksi('tambahhutang', {
+    nama: $('#hNama').value, pokok: pokok,
+    cicilan: parseNominal($('#hCicilan').value)||0, tempo: $('#hTempo').value || ''
+  }, 'Hutang dicatat');
+  if (ok){ $('#hNama').value=''; $('#hPokok').value=''; $('#hCicilan').value=''; $('#hTempo').value=''; }
+};
+
+$('#formBayar').onsubmit = async e => {
+  e.preventDefault();
+  const j = parseNominal($('#bJumlah').value);
+  if (!j){ toast('<b>Jumlah tidak valid</b>','err'); return; }
+  if (!$('#bId').value){ toast('<b>Tidak ada hutang aktif</b>','err'); return; }
+  const ok = await aksi('bayar', { id: $('#bId').value, jumlah: j }, 'Pembayaran tercatat');
+  if (ok) $('#bJumlah').value = '';
+};
+
+$('#formAnggaran').onsubmit = async e => {
+  e.preventDefault();
+  const lim = parseNominal($('#aLimit').value);
+  if (lim == null || isNaN(lim)){ toast('<b>Limit tidak valid</b>','err'); return; }
+  const ok = await aksi('setanggaran', { kategori: $('#aKategori').value, jumlah: lim }, 'Anggaran disimpan');
+  if (ok) $('#aLimit').value = '';
+};
+
+document.addEventListener('click', async e => {
+  const id = e.target.getAttribute && e.target.getAttribute('data-batal');
+  if (!id) return;
+  if (!confirm('Batalkan transaksi ' + id + '?')) return;
+  await aksi('batal', { id: id }, 'Transaksi dibatalkan');
+});
+
+$('#btnCsv').onclick = () => {
+  if (!DATA){ return; }
+  const rows = [['ID','Tanggal','Tipe','Kategori','Jumlah','Catatan','Sumber']];
+  (DATA.transaksi||[]).forEach(x => rows.push([x.id,x.tanggal,x.tipe,x.kategori,x.jumlah,
+    (x.catatan||'').replace(/[;\n]/g,' '), x.sumber||'']));
+  const csv = rows.map(r=>r.join(';')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('\uFEFF'+csv);
+  a.download = 'transaksi-' + (BULAN||'semua') + '.csv';
+  a.click();
+};
+
+/* ============================================================
+   INIT
+   ============================================================ */
+(function init(){
+  try{ const s = JSON.parse(localStorage.getItem(LS)||'{}'); if (s.url) CFG = s; }catch(e){}
+  BULAN = bulanIni();
+  $('#qTanggal').value = tglHariIni();
+  if (!CFG.url) setTimeout(()=>$('#modal').classList.add('on'), 600);
+  load();
+})();
+</script>
+</body>
+</html>

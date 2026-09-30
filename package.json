@@ -1,0 +1,16 @@
+{
+  "name": "uangku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UANGKU — pencatatan keuangan via Telegram + Google Apps Script + Google Sheets, dengan dashboard yang dipublikasikan lewat GitHub Pages.",
+  "scripts": {
+    "test": "node tests/test-backend.js && node tests/test-dom.js && node tests/test-live.js",
+    "test:backend": "node tests/test-backend.js",
+    "test:dom": "node tests/test-dom.js",
+    "test:live": "node tests/test-live.js",
+    "serve": "node serve.js"
+  },
+  "devDependencies": {
+    "jsdom": "^27.0.0"
+  }
+}
