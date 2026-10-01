@@ -133,18 +133,32 @@ Pengingat harian jam 20:00 (opsional): jalankan fungsi **`pasangPengingatHarian`
 
 | Tab | Bisa dilakukan |
 |---|---|
-| Dashboard | KPI bulan berjalan, tren 12 bulan (gridline + skala), **donut pengeluaran per kategori**, transaksi terakhir, catat cepat |
+| Dashboard | KPI bulan berjalan + **sparkline tren**, chart tren kaya (gridline berskala, garis rata-rata, garis tren selisih, tooltip), **donut pengeluaran per kategori**, transaksi terakhir, catat cepat **dengan lampiran** |
 | Sumber Dana | **Langkah 1** — daftar dari mana uang masuk (gaji sebagai sumber utama), KPI pendapatan tetap vs total, ubah/nonaktifkan/hapus, pratinjau per bulan |
 | Plot Anggaran | **Langkah 2** — susun anggaran otomatis dari pendapatan tetap (50/30/20), dikelompokkan Kebutuhan/Keinginan/Tabungan, realisasi vs limit, setel satu pos |
-| Transaksi | Catat manual (dengan **pratinjau** langsung), cari, filter tipe/status/akun/rentang tanggal, **Lihat**, **Edit**, **Batalkan**, **Pulihkan**, export CSV |
+| Transaksi | Catat manual (dengan **pratinjau** langsung), cari, filter tipe/status/akun/rentang tanggal, **Lihat**, **Edit**, **Batalkan**, **Pulihkan**, tautan **lampiran**, export CSV |
 | Hutang | Daftar hutang + progres pelunasan, tambah hutang, bayar cicilan |
 | Rencana | Alokasi 50/30/20, target dana darurat, rasio hutang, rekomendasi tindakan |
+
+### Lampiran struk / nota
+
+Di **Catat Cepat** tersedia kotak lampiran: tarik berkas ke kotaknya, klik untuk memilih, atau
+**tempel gambar dari clipboard** (Ctrl+V). Menerima gambar dan PDF sampai 5 MB.
+
+- Berkas diunggah ke Google Drive ke folder **`UANGKU Lampiran`** dan dibagikan lewat tautan,
+  lalu ditautkan ke transaksinya (tersimpan sebagai JSON di kolom `Lampiran`).
+- Di tabel Transaksi muncul chip **📎 Lampiran**; di modal detail ada pratinjau gambar,
+  tombol **Buka**, dan **Hapus**.
+- Unggahan dikirim lewat **POST** `text/plain` (base64 bisa panjang, tidak muat di query string).
+- Kalau unggahan gagal, **transaksi tidak disimpan** — tidak ada data setengah jadi.
+- Perlu scope Drive: jalankan ulang `setup()` untuk menyetujui izin baru.
 
 ### Alur pemakaian yang disarankan
 
 1. **Tab Sumber Dana** — daftarkan gaji (`8jt`, tetap, bulanan), lalu sumber lain bila ada.
 2. **Tab Plot Anggaran** — klik *Susun Ulang & Simpan*. Anggaran terisi otomatis dari pendapatan tetap.
-3. **Catat transaksi** lewat Telegram atau tab Transaksi. Realisasi langsung dibandingkan dengan plot.
+3. **Catat transaksi** lewat Telegram atau tab Transaksi; lampirkan foto struk bila perlu.
+   Realisasi langsung dibandingkan dengan plot.
 
 Kalau sumber dana belum ada, tab Plot menampilkan panel yang mengarahkan kembali ke langkah 1 —
 tidak ada alur buntu.
@@ -201,8 +215,8 @@ npm test
 
 | Berkas | Cakupan |
 |---|---|
-| `tests/test-backend.js` | 276 asersi: parser nominal, kategori, setup sheet, transaksi, agregasi surplus/defisit, sumber dana, konversi frekuensi, plot anggaran 50/30/20, hutang & pelunasan, edit/pulihkan, API `doGet`, router Telegram `doPost` |
-| `tests/test-dom.js` | 130 asersi: render KPI, chart + gridline, donut kategori, tabel, filter, pencarian, navigasi tab, form, toast |
+| `tests/test-backend.js` | 310 asersi: parser nominal, kategori, setup sheet, transaksi, agregasi surplus/defisit, sumber dana, konversi frekuensi, plot anggaran 50/30/20, hutang & pelunasan, edit/pulihkan, API `doGet`, router Telegram `doPost` |
+| `tests/test-dom.js` | 152 asersi: render KPI, chart kaya, sparkline, donut, lampiran, tabel, filter, pencarian, navigasi tab, form, toast |
 | `tests/test-live.js` | 109 asersi: bentuk permintaan bebas preflight CORS, render data API, aksi tulis, sumber dana & plot, penanganan gagal koneksi |
 
 ## Catatan teknis

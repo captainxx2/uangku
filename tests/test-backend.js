@@ -94,6 +94,32 @@ global.ContentService = {
 };
 global.ScriptApp = { getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ atHour: () => ({ everyDays: () => ({ create: () => {} }) }) }) }), deleteTrigger: () => {} };
 
+/* ---------------- Fake Drive (lampiran) ---------------- */
+const DRIVE_FILES = [];
+class FakeFile {
+  constructor(blob) { this.blob = blob; this.id = 'FILE-' + (DRIVE_FILES.length + 1); }
+  getUrl() { return 'https://drive.google.com/file/d/' + this.id + '/view'; }
+  getId() { return this.id; }
+  setSharing() { this.dibagikan = true; return this; }
+}
+class FakeFolder {
+  constructor(nama) { this.nama = nama; this.berkas = []; }
+  createFile(blob) { const f = new FakeFile(blob); this.berkas.push(f); DRIVE_FILES.push(f); return f; }
+}
+const FOLDERS = [];
+global.DriveApp = {
+  Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' },
+  Permission: { VIEW: 'VIEW' },
+  getFoldersByName: (nama) => {
+    const cocok = FOLDERS.filter(f => f.nama === nama);
+    return { hasNext: () => cocok.length > 0, next: () => cocok[0] };
+  },
+  createFolder: (nama) => { const f = new FakeFolder(nama); FOLDERS.push(f); return f; }
+};
+global.Utilities.base64Encode = (s) => Buffer.from(String(s), 'binary').toString('base64');
+global.Utilities.base64Decode = (s) => Buffer.from(String(s), 'base64');
+global.Utilities.newBlob = (bytes, mime, nama) => ({ bytes: bytes, mime: mime, nama: nama });
+
 /* ---------------- Jalankan Code.gs ---------------- */
 const ctx = {};
 const wrapper = new Function('exports', src + `
@@ -107,6 +133,7 @@ const wrapper = new Function('exports', src + `
   exports.pendapatan_ = pendapatan_; exports.plotAnggaran_ = plotAnggaran_; exports.perBulan_ = perBulan_;
   exports.isTetap_ = isTetap_; exports.petaAnggaran_ = petaAnggaran_; exports.kelompokDari_ = kelompokDari_;
   exports.pesanSumber_ = pesanSumber_; exports.pesanPlot_ = pesanPlot_; exports.bacaSumberDana_ = bacaSumberDana_;
+  exports.simpanLampiran_ = simpanLampiran_; exports.bacaLampiran_ = bacaLampiran_; exports.lampiranKeTeks_ = lampiranKeTeks_;
   exports.pesanRingkasan_ = pesanRingkasan_; exports.pesanAnggaran_ = pesanAnggaran_; exports.pesanGrafik_ = pesanGrafik_;
   exports.pesanHutang_ = pesanHutang_; exports.pesanBantuan_ = pesanBantuan_; exports.kirimTelegram_ = kirimTelegram_;
   exports.rupiah_ = rupiah_;
@@ -649,6 +676,90 @@ ok(String(SENT[0].body).indexOf('Format') > -1, '/hapussumber tanpa ID -> pesan 
 const rFinal2 = ctx.ringkasan_();
 const sumKatPlot = Object.keys(rFinal2.anggaran).reduce((a, k) => a + rFinal2.anggaran[k], 0);
 eq(sumKatPlot, rFinal2.pendapatanTetap, 'total anggaran == pendapatan tetap (dasar plot)');
+
+console.log('\n=== 18. Lampiran transaksi (Google Drive) ===');
+const PNG_KECIL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+eq(FOLDERS.length, 0, 'folder Drive belum dibuat sebelum ada lampiran');
+const meta1 = ctx.simpanLampiran_(PNG_KECIL, 'struk makan.png', '');
+ok(meta1 !== null, 'simpanLampiran_ mengembalikan metadata');
+eq(meta1.nama, 'struk makan.png', 'nama berkas dipertahankan');
+eq(meta1.mime, 'image/png', 'mime terbaca dari data URL');
+ok(/^https:\/\/drive\.google\.com\/file\/d\/FILE-\d+\/view$/.test(meta1.url), 'URL Drive terbentuk: ' + meta1.url);
+eq(meta1.id, 'FILE-1', 'ID berkas berurutan');
+ok(meta1.ukuran > 0, 'ukuran berkas dihitung: ' + meta1.ukuran + ' bita');
+eq(FOLDERS.length, 1, 'folder "UANGKU Lampiran" dibuat sekali');
+eq(FOLDERS[0].nama, 'UANGKU Lampiran', 'nama folder benar');
+eq(DRIVE_FILES.length, 1, 'satu berkas tersimpan di Drive');
+eq(DRIVE_FILES[0].dibagikan, true, 'berkas dibagikan lewat tautan (bisa dibuka)');
+eq(DRIVE_FILES[0].blob.mime, 'image/png', 'blob memakai mime yang benar');
+
+// folder dipakai ulang, tidak dibuat lagi
+const meta2 = ctx.simpanLampiran_(PNG_KECIL, 'nota listrik.pdf', '');
+eq(FOLDERS.length, 1, 'folder tidak diduplikasi untuk lampiran kedua');
+eq(DRIVE_FILES.length, 2, 'berkas kedua tersimpan');
+
+// nama berbahaya dibersihkan
+const meta3 = ctx.simpanLampiran_(PNG_KECIL, 'a/b\\c:d*e?f"g<h>i|j.png', '');
+ok(meta3.nama.indexOf('/') === -1 && meta3.nama.indexOf('\\') === -1
+   && meta3.nama.indexOf(':') === -1 && meta3.nama.indexOf('*') === -1,
+   'karakter terlarang di nama berkas dibersihkan: ' + meta3.nama);
+
+// validasi
+let lampGagal = false;
+try { ctx.simpanLampiran_('bukan-data-url', 'x.png', ''); } catch (e) { lampGagal = /tidak dikenali/.test(e.message); }
+ok(lampGagal, 'data URL tidak valid ditolak');
+eq(ctx.simpanLampiran_('', 'x.png', ''), null, 'data kosong -> null, bukan error');
+const besar = 'data:image/png;base64,' + 'A'.repeat(8 * 1024 * 1024);
+let lampBesar = false;
+try { ctx.simpanLampiran_(besar, 'besar.png', ''); } catch (e) { lampBesar = /terlalu besar/.test(e.message); }
+ok(lampBesar, 'berkas melebihi 5 MB ditolak dengan pesan jelas');
+
+// baca/tulis JSON kolom Lampiran
+const teksLamp = ctx.lampiranKeTeks_(meta1);
+ok(typeof teksLamp === 'string' && teksLamp.indexOf('FILE-1') > -1, 'lampiran disimpan sebagai JSON');
+eq(ctx.bacaLampiran_(teksLamp).nama, 'struk makan.png', 'JSON dibaca kembali dengan benar');
+eq(ctx.bacaLampiran_(''), null, 'kolom kosong -> null');
+eq(ctx.bacaLampiran_('{rusak'), null, 'JSON rusak -> null (tidak melempar)');
+eq(ctx.bacaLampiran_(meta1).id, 'FILE-1', 'objek langsung juga diterima');
+
+// transaksi membawa lampiran
+const tLamp = ctx.catatTransaksi_({ tipe: 'keluar', jumlah: '30rb', kategori: 'makan',
+  catatan: 'dengan struk', lampiran: meta1 });
+ok(String(tLamp.Lampiran).indexOf('FILE-1') > -1, 'kolom Lampiran terisi saat mencatat');
+const barisLamp = ctx.cariTransaksi_(tLamp.ID).row;
+ok(String(barisLamp[10]).indexOf('FILE-1') > -1, 'kolom ke-11 (Lampiran) ada di sheet');
+const dashLamp = JSON.parse(ctx.doGet({ parameter: { action: 'dashboard', token: 'rahasia123' } }).getContent());
+const txLamp = dashLamp.transaksi.find(x => x.id === tLamp.ID);
+ok(txLamp.lampiran !== null && txLamp.lampiran !== undefined, 'API mengirim objek lampiran');
+eq(txLamp.lampiran.url, meta1.url, 'URL lampiran ikut ke dashboard');
+const txTanpa = dashLamp.transaksi.find(x => x.id !== tLamp.ID && x.lampiran === null);
+ok(txTanpa !== undefined, 'transaksi tanpa lampiran -> null (bukan undefined)');
+
+// hapus lampiran lewat edit
+ctx.ubahTransaksi_(tLamp.ID, { lampiran: '' });
+const barisKosong = ctx.cariTransaksi_(tLamp.ID).row;
+eq(String(barisKosong[10]), '', 'lampiran bisa dikosongkan lewat edit');
+// edit lain tidak menyentuh lampiran
+ctx.catatTransaksi_({ tipe: 'keluar', jumlah: '10rb', kategori: 'makan', lampiran: meta2 });
+const tJaga = ctx.catatTransaksi_({ tipe: 'keluar', jumlah: '11rb', kategori: 'makan', lampiran: meta2 });
+ctx.ubahTransaksi_(tJaga.ID, { catatan: 'ubah catatan saja' });
+ok(String(ctx.cariTransaksi_(tJaga.ID).row[10]).indexOf('FILE-2') > -1,
+  'edit tanpa field lampiran tidak menghapus lampiran');
+
+// endpoint POST lampiran
+const postLamp = JSON.parse(ctx.doPost({
+  postData: { contents: JSON.stringify({ token: 'rahasia123', lampiran: PNG_KECIL, nama: 'dari-post.png', id: '' }) },
+  parameter: {}
+}).getContent());
+eq(postLamp.ok, true, 'POST /lampiran berhasil');
+eq(postLamp.data.nama, 'dari-post.png', 'nama berkas dari POST benar');
+const postLampBad = JSON.parse(ctx.doPost({
+  postData: { contents: JSON.stringify({ token: 'salah', lampiran: PNG_KECIL, nama: 'x.png' }) },
+  parameter: {}
+}).getContent());
+eq(postLampBad.ok, false, 'POST lampiran dengan token salah ditolak');
+eq(postLampBad.error, 'unauthorized', 'pesan unauthorized jelas');
 
 console.log('\n============================================');
 console.log('  HASIL: ' + pass + ' lulus, ' + fail + ' gagal');

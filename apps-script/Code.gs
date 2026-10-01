@@ -41,7 +41,7 @@ const SH = { SUMBER: 'SumberDana', TX: 'Transaksi', DEBT: 'Hutang',
 
 const HEADERS = {
   SumberDana: ['ID', 'Nama', 'Jenis', 'Jumlah', 'Frekuensi', 'TanggalMulai', 'Status', 'Catatan'],
-  Transaksi:  ['ID', 'Tanggal', 'Tipe', 'Kategori', 'Jumlah', 'Akun', 'Catatan', 'Sumber', 'Status', 'Dibuat'],
+  Transaksi:  ['ID', 'Tanggal', 'Tipe', 'Kategori', 'Jumlah', 'Akun', 'Catatan', 'Sumber', 'Status', 'Dibuat', 'Lampiran'],
   Hutang:     ['ID', 'Nama', 'Pokok', 'Dibayar', 'Sisa', 'Cicilan', 'JatuhTempo', 'Status', 'Catatan'],
   Anggaran:   ['Kategori', 'Limit', 'Periode', 'Kelompok', 'Persen'],
   Pengaturan: ['Key', 'Value']
@@ -297,7 +297,8 @@ function catatTransaksi_(opts) {
     Catatan: opts.catatan || '',
     Sumber: opts.sumber || 'telegram',
     Status: 'aktif',
-    Dibuat: new Date().toISOString()
+    Dibuat: new Date().toISOString(),
+    Lampiran: opts.lampiran ? lampiranKeTeks_(opts.lampiran) : ''
   };
   tulis_(SH.TX, row);
   return row;
@@ -479,9 +480,66 @@ function ubahTransaksi_(id, patch) {
   rowBaru[4] = baru.Jumlah;
   rowBaru[5] = baru.Akun;
   rowBaru[6] = baru.Catatan;
+  if (patch && patch.lampiran !== undefined) {
+    rowBaru[10] = patch.lampiran ? lampiranKeTeks_(patch.lampiran) : '';
+  }
   t.sh.getRange(t.idx + 2, 1, 1, lebar).setValues([rowBaru]);
 
   return { ID: t.id, sebelum: lama, sesudah: baru };
+}
+
+/* ----------------------------- LAMPIRAN ----------------------------- */
+
+/**
+ * Simpan berkas lampiran ke Google Drive (folder "UANGKU Lampiran").
+ * dataUrl: "data:image/png;base64,AAAA..." dari pembaca berkas di browser.
+ * Mengembalikan { nama, mime, url, id, ukuran }.
+ */
+function simpanLampiran_(dataUrl, namaAsli, idTransaksi) {
+  if (!dataUrl) return null;
+  const m = String(dataUrl).match(/^data:([^;,]+)(;base64)?,(.*)$/);
+  if (!m) throw new Error('Format lampiran tidak dikenali.');
+  const mime = m[1] || 'application/octet-stream';
+  const base64 = m[2] ? m[3] : Utilities.base64Encode(decodeURIComponent(m[3]));
+
+  const batasBita = 5 * 1024 * 1024; // batas aman Apps Script
+  const ukuran = Math.round(base64.length * 3 / 4);
+  if (ukuran > batasBita) {
+    throw new Error('Berkas terlalu besar (' + Math.round(ukuran / 1024 / 1024 * 10) / 10 +
+      ' MB). Batas ' + (batasBita / 1024 / 1024) + ' MB.');
+  }
+
+  const nama = String(namaAsli || ('lampiran-' + (idTransaksi || Date.now()))).trim();
+  const aman = nama.replace(/[\\/:*?"<>|]/g, '_').slice(0, 120);
+
+  let folder;
+  const namaFolder = 'UANGKU Lampiran';
+  const it = DriveApp.getFoldersByName(namaFolder);
+  folder = it.hasNext() ? it.next() : DriveApp.createFolder(namaFolder);
+
+  const blob = Utilities.newBlob(Utilities.base64Decode(base64), mime, aman);
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  return {
+    nama: aman,
+    mime: mime,
+    url: file.getUrl(),
+    id: file.getId(),
+    ukuran: ukuran
+  };
+}
+
+/** Lampiran disimpan di kolom sebagai JSON; baca dengan aman. */
+function bacaLampiran_(nilai) {
+  if (!nilai) return null;
+  if (typeof nilai === 'object') return nilai; // Sheets sudah mengembalikan objek
+  try { return JSON.parse(String(nilai)); } catch (e) { return null; }
+}
+
+function lampiranKeTeks_(obj) {
+  if (!obj) return '';
+  try { return JSON.stringify(obj); } catch (e) { return ''; }
 }
 
 /* ----------------------------- SUMBER DANA ----------------------------- */
@@ -1151,6 +1209,13 @@ function doPost(e) {
       return json_(api_(body, e.parameter || {}));
     }
 
+    // Unggah lampiran lewat POST agar berkas besar tidak melewati batas panjang URL.
+    if (body && body.lampiran) {
+      if (API_TOKEN && body.token !== API_TOKEN) return json_({ ok: false, error: 'unauthorized' });
+      const meta = simpanLampiran_(body.lampiran, body.nama, body.id);
+      return json_({ ok: true, data: meta });
+    }
+
     return json_({ ok: false, error: 'Payload tidak dikenali' });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
@@ -1235,7 +1300,8 @@ function api_(req, params) {
             akun: x.Akun || 'Tunai',
             catatan: x.Catatan || '',
             sumber: x.Sumber || '',
-            status: String(x.Status) === 'batal' ? 'batal' : 'aktif'
+            status: String(x.Status) === 'batal' ? 'batal' : 'aktif',
+            lampiran: bacaLampiran_(x.Lampiran)
           };
         }).sort(function (a, b) { return a.tanggal < b.tanggal ? 1 : -1; }),
         hutang: daftarHutang_().filter(function (x) { return String(x.Status) === 'aktif'; })
@@ -1288,6 +1354,10 @@ function api_(req, params) {
     /* ---- aksi tulis dari dashboard ---- */
 
     case 'catat': {
+      let lampiran = null;
+      if (params.lampiran) {
+        lampiran = simpanLampiran_(params.lampiran, params.lampiranNama, '');
+      }
       const row = catatTransaksi_({
         tipe: params.tipe,
         jumlah: params.jumlah,
@@ -1295,10 +1365,14 @@ function api_(req, params) {
         catatan: params.catatan || '',
         akun: params.akun || 'Tunai',
         tanggal: params.tanggal || '',
-        sumber: 'web'
+        sumber: params.sumber || 'web',
+        lampiran: lampiran
       });
-      return { ok: true, data: row };
+      return { ok: true, data: row, lampiran: lampiran };
     }
+
+    case 'lampiran':
+      return { ok: true, data: simpanLampiran_(params.data, params.nama, params.id) };
 
     case 'bayar':
       return { ok: true, data: bayarHutang_(params.id, params.jumlah) };

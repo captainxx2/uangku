@@ -71,6 +71,46 @@ setTimeout(() => {
       'setiap sparkline punya id gradien unik (tidak bentrok)');
     ok(w.document.querySelectorAll('.reveal').length >= 6,
       'grid utama memakai reveal berjenjang: ' + w.document.querySelectorAll('.reveal').length + ' blok');
+
+    console.log('\n=== C3. Chart diperkaya ===');
+    eq(w.document.querySelectorAll('#chartTren .avg').length, 1, 'garis rata-rata pengeluaran ada');
+    ok(/#|rata/.test($('#chartTren .avg').getAttribute('data-v')), 'garis rata-rata punya label: '
+      + $('#chartTren .avg').getAttribute('data-v'));
+    ok(/^\d+(\.\d+)?%$/.test($('#chartTren .avg').style.top), 'posisi garis rata-rata dalam persen: '
+      + $('#chartTren .avg').style.top);
+    ok($('#chartTren svg.net') !== null, 'overlay SVG tren selisih ada');
+    const netD = $('#chartTren svg.net path').getAttribute('d');
+    ok(/^M[\d.]+ [\d.]+ L/.test(netD), 'path tren selisih berformat benar');
+    ok(netD.indexOf('NaN') === -1, 'path tren selisih bebas NaN');
+    const tips = [...w.document.querySelectorAll('#chartTren .col')].map(c => c.getAttribute('data-tip'));
+    ok(tips.every(t => t && t.length > 20), 'setiap kolom punya tooltip data-tip');
+    ok(tips[0].indexOf('Masuk') > -1 && tips[0].indexOf('Keluar') > -1
+       && tips[0].indexOf('Selisih') > -1 && tips[0].indexOf('Rasio') > -1,
+      'tooltip memuat masuk/keluar/selisih/rasio');
+    eq(w.document.querySelectorAll('#chartTren .col[title]').length, 0,
+      'title lama diganti data-tip (tidak ada tooltip ganda)');
+    eq(w.document.querySelectorAll('#chartTren .legend').length, 0, 'legend berada di luar chart');
+    ok($('.legend').textContent.indexOf('Tren selisih') > -1, 'legend menjelaskan garis selisih');
+    ok($('.legend').textContent.indexOf('Rata-rata keluar') > -1, 'legend menjelaskan garis rata-rata');
+
+    console.log('\n=== C4. Lampiran di Catat Cepat ===');
+    ok($('#qDrop') !== null, 'dropzone lampiran ada');
+    ok($('#qBerkas') !== null, 'input file tersembunyi ada');
+    eq($('#qBerkas').getAttribute('accept'), 'image/*,application/pdf', 'jenis berkas dibatasi');
+    ok($('#qLampiranInfo').classList.contains('hide'), 'info lampiran tersembunyi saat kosong');
+    ok($('#qDrop').textContent.indexOf('maks 5 MB') > -1, 'batas ukuran dijelaskan ke pengguna');
+    // tolak jenis berkas yang tidak didukung
+    w.pilihBerkas({ name: 'virus.exe', type: 'application/x-msdownload', size: 1000 });
+    ok(!$('#qLampiranInfo').classList.contains('hide'), 'info lampiran muncul saat ditolak');
+    ok($('#qLampiranInfo').className.indexOf('err') > -1, 'kartu lampiran bergaya error');
+    ok($('#qLampiranInfo').textContent.indexOf('tidak didukung') > -1, 'alasan penolakan dijelaskan');
+    // isi jumlah dulu supaya pratinjau terisi, lalu cek baris Lampiran
+    $('#mJumlah').value = '25rb';
+    $('#mJumlah').dispatchEvent(new w.Event('input'));
+    ok($('#mPreview').textContent.indexOf('Lampiran') > -1, 'pratinjau manual punya baris Lampiran');
+    ok($('#mPreview').textContent.indexOf('—') > -1, 'pratinjau menandai lampiran kosong dengan —');
+    $('#mJumlah').value = '';
+    $('#mJumlah').dispatchEvent(new w.Event('input'));
     ok(cols[5].querySelector('.cap').textContent.trim().length > 0, 'label bulan terisi');
 
     console.log('\n=== D. Kategori & plot anggaran ===');

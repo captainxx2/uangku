@@ -240,7 +240,7 @@
   /* ============ CHART ============ */
   .chartbox{position:relative;padding:6px 0 0}
   .chart{
-    display:flex;align-items:flex-end;gap:12px;height:clamp(200px,26vh,340px);
+    display:flex;align-items:flex-end;gap:12px;height:clamp(210px,27vh,360px);
     padding:8px 2px 0;position:relative;
   }
   .chart .grid{
@@ -255,31 +255,78 @@
     color:var(--mut);background:var(--card);padding:0 4px;border-radius:4px;
     font-variant-numeric:tabular-nums;
   }
+
+  /* garis rata-rata pengeluaran */
+  .chart .avg{
+    position:absolute;left:2px;right:2px;height:0;
+    border-top:1px dashed rgba(255,176,32,.55);pointer-events:none;z-index:2;
+  }
+  .chart .avg::after{
+    content:attr(data-v);position:absolute;right:0;top:-16px;font-size:10px;
+    color:var(--warn);background:var(--card);padding:0 5px;border-radius:5px;
+    font-weight:600;font-variant-numeric:tabular-nums;
+  }
+
+  /* garis tren selisih (overlay SVG) */
+  .chart .net{
+    position:absolute;inset:8px 2px 22px;width:calc(100% - 4px);height:calc(100% - 30px);
+    pointer-events:none;z-index:3;overflow:visible;
+  }
+  .chart .net path{fill:none;stroke:#7cc4ff;stroke-width:2;stroke-linecap:round;
+    stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(124,196,255,.55))}
+  .chart .net circle{fill:#0e1728;stroke:#7cc4ff;stroke-width:2}
+
   .chart .col{
     flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;
-    height:100%;position:relative;z-index:1;border-radius:9px;padding:4px 2px 0;
+    height:100%;position:relative;z-index:4;border-radius:10px;padding:4px 2px 0;
     transition:background .16s var(--ease);cursor:default;
   }
-  .chart .col:hover{background:rgba(79,140,255,.08)}
+  .chart .col:hover{background:rgba(79,140,255,.09)}
   .chart .bars{
     flex:1;display:flex;align-items:flex-end;gap:4px;width:100%;
     position:relative;
   }
   .chart .bars i{
-    flex:1;border-radius:6px 6px 2px 2px;min-height:3px;display:block;
-    transition:height .55s var(--ease),filter .16s var(--ease);
-    position:relative;
+    flex:1;border-radius:7px 7px 3px 3px;min-height:3px;display:block;
+    transition:height .55s var(--ease),filter .16s var(--ease),transform .16s var(--ease);
+    position:relative;transform-origin:bottom;
   }
-  .chart .col:hover .bars i{filter:brightness(1.18)}
-  .chart .bars i.m{background:var(--grad-ok);box-shadow:0 -3px 14px -6px rgba(37,208,122,.85)}
-  .chart .bars i.k{background:var(--grad-bad);box-shadow:0 -3px 14px -6px rgba(255,95,109,.85)}
-  .chart .cap{font-size:10.5px;color:var(--mut);white-space:nowrap;font-weight:600}
+  /* kilau tipis di tepi atas batang */
+  .chart .bars i::after{
+    content:"";position:absolute;inset:0 0 auto 0;height:38%;border-radius:inherit;
+    background:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,0));
+    pointer-events:none;
+  }
+  .chart .col:hover .bars i{filter:brightness(1.22);transform:scaleY(1.015)}
+  .chart .bars i.m{background:var(--grad-ok);box-shadow:0 -4px 18px -7px rgba(37,208,122,.95)}
+  .chart .bars i.k{background:var(--grad-bad);box-shadow:0 -4px 18px -7px rgba(255,95,109,.95)}
+  .chart .cap{font-size:10.5px;color:var(--mut);white-space:nowrap;font-weight:600;
+    transition:color .16s var(--ease)}
   .chart .col.now .cap{color:var(--tx)}
+  .chart .col:hover .cap{color:var(--tx)}
+
+  /* tooltip melayang di atas kolom */
+  .chart .col::after{
+    content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;
+    transform:translateX(-50%) translateY(4px);white-space:pre;text-align:left;
+    background:rgba(10,17,31,.97);border:1px solid var(--line);
+    border-radius:10px;padding:9px 12px;font-size:11.5px;line-height:1.65;
+    color:var(--tx-dim);box-shadow:var(--sh-3);pointer-events:none;
+    opacity:0;transition:opacity .16s var(--ease),transform .16s var(--ease);z-index:20;
+    font-variant-numeric:tabular-nums;
+  }
+  .chart .col:hover::after{opacity:1;transform:translateX(-50%) translateY(0)}
+  .chart .col:first-child::after{left:0;transform:translateX(0) translateY(4px)}
+  .chart .col:first-child:hover::after{transform:translateX(0) translateY(0)}
+  .chart .col:last-child::after{left:auto;right:0;transform:translateX(0) translateY(4px)}
+  .chart .col:last-child:hover::after{transform:translateX(0) translateY(0)}
 
   .legend{display:flex;gap:18px;font-size:12px;color:var(--mut);margin-top:14px;flex-wrap:wrap}
   .legend span{display:inline-flex;align-items:center;gap:7px}
   .legend b{display:inline-block;width:11px;height:11px;border-radius:4px;flex:none}
   .legend .m{background:var(--grad-ok)} .legend .k{background:var(--grad-bad)}
+  .legend .n{width:16px;height:3px;border-radius:2px;background:#7cc4ff}
+  .legend .a{width:16px;height:0;border-top:2px dashed rgba(255,176,32,.7);border-radius:0}
 
   /* donut */
   .donutwrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
@@ -497,6 +544,67 @@
   /* ---- pv & note sedikit lebih lembut ---- */
   .pv{background:linear-gradient(180deg,rgba(32,48,78,.72),rgba(14,23,40,.55))}
   .note{backdrop-filter:blur(4px)}
+
+  /* ---- dropzone lampiran ---- */
+  .drop{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    padding:18px 14px;border:1.5px dashed var(--line);border-radius:var(--r-sm);
+    background:rgba(12,20,36,.5);cursor:pointer;text-align:center;
+    transition:border-color .16s var(--ease),background .16s var(--ease),transform .16s var(--ease);
+  }
+  .drop:hover,.drop.over{
+    border-color:var(--acc);background:rgba(79,140,255,.1);transform:translateY(-1px);
+  }
+  .drop.over{border-style:solid}
+  .drop .ic{font-size:20px;line-height:1;opacity:.85}
+  .drop .tx{font-size:12.5px;color:var(--tx-dim)}
+  .drop .tx b{color:var(--acc)}
+  .drop .mt2{font-size:11px;color:var(--mut)}
+
+  .lamp{
+    display:flex;align-items:center;gap:11px;margin-top:10px;padding:10px 12px;
+    border:1px solid var(--line);border-radius:var(--r-sm);
+    background:linear-gradient(180deg,rgba(30,45,74,.6),rgba(14,23,40,.5));
+  }
+  .lamp .th{
+    width:42px;height:42px;border-radius:9px;flex:none;object-fit:cover;
+    background:rgba(27,41,66,.9);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:18px;
+  }
+  .lamp .inf{flex:1;min-width:0}
+  .lamp .nm2{
+    font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .lamp .sz{font-size:11px;color:var(--mut)}
+  .lamp .bar{height:4px;margin-top:6px}
+  .lamp .x{
+    border:none;background:transparent;color:var(--mut);font-size:17px;line-height:1;
+    padding:4px 7px;border-radius:7px;cursor:pointer;flex:none;
+  }
+  .lamp .x:hover{color:var(--bad);background:rgba(255,95,109,.12);transform:none}
+  .lamp.ok{border-color:rgba(37,208,122,.4)}
+  .lamp.err{border-color:rgba(255,95,109,.45)}
+
+  /* tautan lampiran di tabel & modal */
+  .lampchip{
+    display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:7px;
+    background:rgba(79,140,255,.14);color:#9dc0ff;font-size:11px;font-weight:600;
+    text-decoration:none;border:1px solid rgba(79,140,255,.28);
+  }
+  .lampchip:hover{background:rgba(79,140,255,.24);text-decoration:none}
+  .lampbox{
+    display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);
+    border-radius:var(--r-sm);background:rgba(12,20,36,.5);margin-top:12px;
+  }
+  .lampbox img{
+    width:74px;height:74px;object-fit:cover;border-radius:9px;border:1px solid var(--line);
+    flex:none;cursor:zoom-in;background:rgba(27,41,66,.9);
+  }
+  .lampbox .fall{
+    width:74px;height:74px;border-radius:9px;border:1px solid var(--line);flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:26px;
+    background:rgba(27,41,66,.9);
+  }
 </style>
 </head>
 <body>
@@ -555,6 +663,8 @@
         <div class="legend">
           <span><b class="m"></b>Masuk</span>
           <span><b class="k"></b>Keluar</span>
+          <span><b class="n"></b>Tren selisih</span>
+          <span><b class="a"></b>Rata-rata keluar</span>
         </div>
       </div>
       <div class="card">
@@ -587,6 +697,16 @@
             <div class="f"><label>Kategori</label><select id="qKategori"></select></div>
           </div>
           <div class="f"><label>Catatan</label><input id="qCatatan" placeholder="opsional"></div>
+          <div class="f">
+            <label>Lampiran <span style="text-transform:none;color:var(--mut);font-weight:400">— struk / nota (opsional)</span></label>
+            <input type="file" id="qBerkas" accept="image/*,application/pdf" style="display:none">
+            <div id="qDrop" class="drop">
+              <span class="ic">📎</span>
+              <span class="tx">Tarik berkas ke sini atau <b>pilih berkas</b></span>
+              <span class="mt2">Gambar atau PDF · maks 5 MB</span>
+            </div>
+            <div id="qLampiranInfo" class="lamp hide"></div>
+          </div>
           <button class="primary" style="width:100%" type="submit">Simpan Transaksi</button>
         </form>
       </div>
@@ -783,7 +903,7 @@
       <div class="tblwrap">
         <table id="tblTx">
         <thead><tr><th>ID</th><th>Tanggal</th><th>Tipe</th><th>Kategori</th><th>Akun</th>
-          <th>Catatan</th><th>Sumber</th><th class="num">Jumlah</th><th>Status</th><th></th></tr></thead>
+          <th>Catatan</th><th>Sumber</th><th>Lampiran</th><th class="num">Jumlah</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>
@@ -1195,6 +1315,113 @@ function render(){
   isiSelect();
 }
 
+/* ---- lampiran: pilih, validasi, unggah, pratinjau ---- */
+const BATAS_BERKAS = 5 * 1024 * 1024;
+let BERKAS = null;          // { nama, mime, ukuran, dataUrl, thumb }
+
+function ukuranTeks_(b){
+  if (!b) return '0 B';
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(0) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+
+function pilihBerkas(file){
+  const box = $('#qLampiranInfo');
+  if (!file){ BERKAS = null; box.classList.add('hide'); return; }
+
+  const boleh = /^image\//.test(file.type) || file.type === 'application/pdf';
+  if (!boleh){
+    tampilLampiranError('Jenis berkas tidak didukung. Gunakan gambar atau PDF.');
+    return;
+  }
+  if (file.size > BATAS_BERKAS){
+    tampilLampiranError('Berkas ' + ukuranTeks_(file.size) + ' melebihi batas 5 MB.');
+    return;
+  }
+
+  const pembaca = new FileReader();
+  box.classList.remove('hide');
+  box.className = 'lamp';
+  box.innerHTML = '<div class="th">📄</div><div class="inf">'
+    + '<div class="nm2">' + esc(file.name) + '</div>'
+    + '<div class="sz">' + ukuranTeks_(file.size) + ' · membaca…</div>'
+    + '<div class="bar"><i style="width:15%"></i></div></div>';
+
+  pembaca.onload = () => {
+    BERKAS = {
+      nama: file.name,
+      mime: file.type,
+      ukuran: file.size,
+      dataUrl: pembaca.result,
+      thumb: /^image\//.test(file.type) ? pembaca.result : null
+    };
+    renderLampiranInfo();
+    renderPreviewManual();
+  };
+  pembaca.onerror = () => tampilLampiranError('Gagal membaca berkas.');
+  pembaca.readAsDataURL(file);
+}
+
+function tampilLampiranError(pesan){
+  BERKAS = null;
+  const box = $('#qLampiranInfo');
+  box.classList.remove('hide');
+  box.className = 'lamp err';
+  box.innerHTML = '<div class="th">⚠️</div><div class="inf">'
+    + '<div class="nm2">Lampiran ditolak</div>'
+    + '<div class="sz">' + esc(pesan) + '</div></div>'
+    + '<button type="button" class="x" id="qLampiranHapus">✕</button>';
+  const x = $('#qLampiranHapus');
+  if (x) x.onclick = hapusLampiran;
+  renderPreviewManual();
+}
+
+function renderLampiranInfo(){
+  const box = $('#qLampiranInfo');
+  if (!BERKAS){ box.classList.add('hide'); return; }
+  box.classList.remove('hide');
+  box.className = 'lamp ok';
+  box.innerHTML =
+    (BERKAS.thumb
+      ? '<img class="th" src="' + BERKAS.thumb + '" alt="pratinjau lampiran">'
+      : '<div class="th">📄</div>')
+    + '<div class="inf">'
+    + '<div class="nm2">' + esc(BERKAS.nama) + '</div>'
+    + '<div class="sz">' + esc(BERKAS.mime || 'berkas') + ' · ' + ukuranTeks_(BERKAS.ukuran)
+    + ' · siap dikirim ke Google Drive</div>'
+    + '<div class="bar"><i class="ok" style="width:100%"></i></div></div>'
+    + '<button type="button" class="x" id="qLampiranHapus" title="Hapus lampiran">✕</button>';
+  const x = $('#qLampiranHapus');
+  if (x) x.onclick = hapusLampiran;
+}
+
+function hapusLampiran(){
+  BERKAS = null;
+  const inp = $('#qBerkas');
+  if (inp) inp.value = '';
+  const box = $('#qLampiranInfo');
+  if (box){ box.classList.add('hide'); box.innerHTML = ''; }
+  renderPreviewManual();
+}
+
+/** Kirim lampiran lewat POST (base64 bisa panjang, jangan lewat query string). */
+async function unggahLampiran(){
+  if (!BERKAS) return null;
+  if (DEMO) return null;
+  const res = await fetch(CFG.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ token: CFG.token, lampiran: BERKAS.dataUrl,
+      nama: BERKAS.nama, id: '' }),
+    redirect: 'follow'
+  });
+  if (!res.ok) throw new Error('unggah lampiran: HTTP ' + res.status);
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'unggah lampiran gagal');
+  return j.data;
+}
+
 /* ---- chart tren: batang + gridline + skala ---- */
 function renderTren(d){
   const box = $('#chartTren');
@@ -1209,15 +1436,37 @@ function renderTren(d){
   const garis = [1, 0.75, 0.5, 0.25, 0].map(f =>
     '<i data-v="' + (f === 0 ? '0' : rpShort(atas * f)) + '"></i>').join('');
 
+  // garis rata-rata pengeluaran
+  const rataKeluar = t.reduce((a, x) => a + x.keluar, 0) / t.length;
+  const yRata = 30 - (rataKeluar / atas) * 26;
+  const avg = '<div class="avg" data-v="rata² keluar ' + rpShort(rataKeluar) +
+    '" style="top:' + yRata.toFixed(2) + '%"></div>';
+
+  // garis tren selisih (net) sebagai overlay SVG
+  const net = t.map(x => x.selisih);
+  const nMin = Math.min(...net, 0), nMax = Math.max(...net);
+  const nSpan = (nMax - nMin) || 1;
+  const nPts = net.map((v, i) => [
+    (i / Math.max(1, net.length - 1)) * 100,
+    (30 - ((v - nMin) / nSpan) * 26).toFixed(2)
+  ]);
+  const nPath = nPts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1]).join(' ');
+  const netSvg = '<svg class="net" viewBox="0 0 100 34" preserveAspectRatio="none">'
+    + '<path d="' + nPath + '"></path></svg>';
+
   const cols = t.map((x, i) => {
     const hm = Math.max(3, Math.round(x.masuk / atas * 100));
     const hk = Math.max(3, Math.round(x.keluar / atas * 100));
     const nm = namaBulan(x.bulan).split(' ')[0].slice(0, 3);
     const th = String(x.bulan).slice(2, 4);
     const kini = i === t.length - 1;
-    return '<div class="col' + (kini ? ' now' : '') + '" title="' + esc(namaBulan(x.bulan)) +
-      '\nMasuk  ' + rp(x.masuk) + '\nKeluar ' + rp(x.keluar) +
-      '\nSelisih ' + rp(x.selisih) + '">'
+    const rasio = x.masuk > 0 ? Math.round(x.selisih / x.masuk * 100) : 0;
+    const tip = namaBulan(x.bulan)
+      + '\nMasuk    ' + rp(x.masuk)
+      + '\nKeluar   ' + rp(x.keluar)
+      + '\nSelisih  ' + (x.selisih >= 0 ? '+' : '−') + rp(Math.abs(x.selisih))
+      + '\nRasio    ' + rasio + '%';
+    return '<div class="col' + (kini ? ' now' : '') + '" data-tip="' + esc(tip) + '">'
       + '<div class="bars">'
       + '<i class="m" style="height:' + hm + '%"></i>'
       + '<i class="k" style="height:' + hk + '%"></i>'
@@ -1225,7 +1474,7 @@ function renderTren(d){
       + '<div class="cap">' + esc(nm) + ' ' + esc(th) + '</div></div>';
   }).join('');
 
-  box.innerHTML = '<div class="grid">' + garis + '</div>' + cols;
+  box.innerHTML = '<div class="grid">' + garis + '</div>' + avg + netSvg + cols;
 
   const totalMasuk = t.reduce((a, x) => a + x.masuk, 0);
   const totalKeluar = t.reduce((a, x) => a + x.keluar, 0);
@@ -1371,7 +1620,7 @@ function renderTx(d){
 
   const tb = $('#tblTx tbody');
   if (!tx.length){
-    tb.innerHTML = '<tr><td colspan="10"><div class="empty">Tidak ada transaksi cocok</div></td></tr>';
+    tb.innerHTML = '<tr><td colspan="11"><div class="empty">Tidak ada transaksi cocok</div></td></tr>';
     return;
   }
   tb.innerHTML = tx.map(x=>{
@@ -1383,6 +1632,10 @@ function renderTx(d){
       + '<td>'+esc(x.kategori)+'</td><td class="mt">'+esc(x.akun||'Tunai')+'</td>'
       + '<td class="mt">'+esc(x.catatan||'—')+'</td>'
       + '<td class="mt">'+esc(x.sumber||'—')+'</td>'
+      + '<td>' + (x.lampiran
+          ? '<a class="lampchip" href="' + esc(x.lampiran.url) + '" target="_blank" '
+            + 'rel="noopener" title="' + esc(x.lampiran.nama) + '">📎 Lampiran</a>'
+          : '<span class="mt">—</span>') + '</td>'
       + '<td class="num" style="color:'+(batal?'var(--mut)':m?'var(--ok)':'var(--bad)')+'">'
       + (m?'+':'−')+rp(x.jumlah)+'</td>'
       + '<td>'+(batal?'<span class="tag batal">BATAL</span>':'<span class="mt">aktif</span>')+'</td>'
@@ -1423,10 +1676,22 @@ function renderPreviewManual(){
     + '<div class="k">Tanggal</div><div class="v">'+esc(f.tanggal)+'</div>'
     + '<div class="k">Akun</div><div class="v">'+esc(f.akun)+'</div>'
     + '<div class="k">Catatan</div><div class="v">'+esc(f.catatan||'—')+'</div>'
+    + '<div class="k">Lampiran</div><div class="v">'
+      + (BERKAS ? esc(BERKAS.nama) + ' (' + ukuranTeks_(BERKAS.ukuran) + ')' : '—') + '</div>'
     + '</div>'
+    + (BERKAS && BERKAS.thumb
+        ? '<img src="' + BERKAS.thumb + '" alt="pratinjau lampiran" '
+          + 'style="width:100%;max-height:150px;object-fit:cover;border-radius:10px;'
+          + 'border:1px solid var(--line);margin-top:14px">'
+        : '')
     + '<div class="note'+(valid?'':' warn')+'" style="margin:16px 0 0">'
     + (valid ? 'Akan dicatat sebagai <b>'+f.tipe+'</b> dan masuk ke laporan bulan <b>'
         + esc(namaBulan(String(f.tanggal).slice(0,7)))+'</b>.'
+        + (BERKAS
+            ? (DEMO
+                ? ' <b>Mode demo</b> — lampiran hanya dipratinjau, tidak diunggah.'
+                : ' Lampiran diunggah ke Drive dan ditautkan ke transaksi.')
+            : '')
       : 'Nominal belum dikenali. Contoh yang diterima: <code>25rb</code>, <code>1,5jt</code>, <code>150000</code>.')
     + '</div></div>';
 }
@@ -1442,6 +1707,8 @@ function bukaTx(id){
   const x = cariTx(id);
   if (!x){ toast('<b>Tidak ditemukan</b>Transaksi '+esc(id)+' tidak ada di periode ini.','err'); return; }
   TX_AKTIF = x;
+  BERKAS_EDIT = null;
+  TX_AKTIF._lampiranDihapus = false;
   const batal = (x.status||'aktif') === 'batal';
   $('#txJudul').textContent = 'Detail Transaksi';
   $('#txSub').innerHTML = '<code>'+esc(x.id)+'</code> · dibuat dari <b>'+esc(x.sumber||'web')+'</b>'
@@ -1471,8 +1738,10 @@ function bukaTx(id){
     <div class="note" style="margin-top:14px">
       Mengubah <b>tipe</b> atau <b>jumlah</b> langsung mengubah KPI, grafik, dan anggaran periode ini.
     </div>
+    <div id="eLampiran"></div>
     <div id="ePreview" style="margin-top:14px"></div>`;
 
+  renderLampiranEdit(x);
   isiSelectKategori($('#eKategori'), x.tipe, x.kategori);
   $('#txSimpan').classList.toggle('hide', batal);
   $('#txBatal').classList.toggle('hide', batal);
@@ -1506,6 +1775,47 @@ function renderPreviewEdit(){
 }
 
 function tutupTx(){ $('#modalTx').classList.remove('on'); TX_AKTIF = null; }
+
+/* ---- lampiran di modal detail: lihat, ganti, hapus ---- */
+let BERKAS_EDIT = null;   // berkas pengganti yang dipilih di modal
+
+function renderLampiranEdit(x){
+  const box = $('#eLampiran');
+  if (!box) return;
+  const lamp = (BERKAS_EDIT ? null : (x && x.lampiran)) || null;
+  const judul = BERKAS_EDIT
+    ? '<div class="nm2">' + esc(BERKAS_EDIT.nama) + '</div>'
+      + '<div class="sz">' + ukuranTeks_(BERKAS_EDIT.ukuran) + ' · akan menggantikan lampiran lama</div>'
+    : (lamp
+      ? '<div class="nm2">' + esc(lamp.nama) + '</div>'
+        + '<div class="sz">' + esc(lamp.mime || 'berkas') + ' · '
+        + ukuranTeks_(lamp.ukuran || 0) + ' · tersimpan di Drive</div>'
+      : '<div class="nm2">Belum ada lampiran</div>'
+        + '<div class="sz">Bisa dilampirkan dari form Catat Cepat</div>');
+
+  const gambar = BERKAS_EDIT && BERKAS_EDIT.thumb
+    ? '<img src="' + BERKAS_EDIT.thumb + '" alt="pratinjau pengganti">'
+    : (lamp && /^image\//.test(lamp.mime || '')
+      ? '<img src="https://drive.google.com/thumbnail?id=' + esc(lamp.id) + '&sz=w400" '
+        + 'alt="lampiran" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'fall\',textContent:\'🖼️\'}))">'
+      : '<div class="fall">' + (lamp ? '📄' : '📎') + '</div>');
+
+  box.innerHTML = '<div class="lampbox">' + gambar
+    + '<div class="inf" style="flex:1;min-width:0">' + judul + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px">'
+    + (lamp ? '<a class="lampchip" href="' + esc(lamp.url) + '" target="_blank" rel="noopener">Buka</a>' : '')
+    + (lamp ? '<button type="button" class="mini ghost" id="eLampHapus">Hapus</button>' : '')
+    + '</div></div>';
+
+  const hps = $('#eLampHapus');
+  if (hps) hps.onclick = () => {
+    BERKAS_EDIT = null;
+    TX_AKTIF.lampiran = null;          // ditandai untuk dikosongkan saat simpan
+    TX_AKTIF._lampiranDihapus = true;
+    renderLampiranEdit(TX_AKTIF);
+    renderPreviewEdit();
+  };
+}
 
 
 /* ---- hutang ---- */
@@ -2004,6 +2314,39 @@ $('#formQuick').onsubmit = async e => {
   }, 'Transaksi tersimpan');
   if (ok){ $('#qJumlah').value=''; $('#qCatatan').value=''; }
 };
+/* --- lampiran: dropzone & pemilih berkas --- */
+(function pasangDrop(){
+  const drop = $('#qDrop'), inp = $('#qBerkas');
+  if (!drop || !inp) return;
+  drop.onclick = () => inp.click();
+  inp.onchange = () => pilihBerkas(inp.files && inp.files[0]);
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.add('over');
+  }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation();
+    if (ev === 'dragleave' && drop.contains(e.relatedTarget)) return;
+    drop.classList.remove('over');
+  }));
+  drop.addEventListener('drop', e => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) pilihBerkas(f);
+  });
+  // tempel gambar dari clipboard
+  document.addEventListener('paste', e => {
+    const it = e.clipboardData && e.clipboardData.items;
+    if (!it) return;
+    for (const x of it){
+      if (x.kind === 'file' && /^image\//.test(x.type)){
+        const f = x.getAsFile();
+        if (f && document.activeElement && $('#formQuick').contains(document.activeElement)){
+          pilihBerkas(f);
+        }
+        break;
+      }
+    }
+  });
+})();
 
 /* --- sumber dana: form, pratinjau, aksi --- */
 ['#sdNama','#sdJumlah','#sdMulai'].forEach(s => {
@@ -2118,11 +2461,26 @@ $('#formManual').onsubmit = async e => {
   if (!f.jumlah || isNaN(f.jumlah) || f.jumlah <= 0){
     toast('<b>Nominal tidak valid</b>Contoh: 25rb, 1,5jt, 150000','err'); return;
   }
+  // Lampiran diunggah dulu ke Drive; kalau gagal, transaksi tidak jadi disimpan
+  // supaya tidak ada data yang setengah jadi.
+  let meta = null;
+  if (BERKAS){
+    try{
+      meta = await unggahLampiran();
+    }catch(err){
+      toast('<b>Lampiran gagal diunggah</b>' + esc(err.message) + '<br>Transaksi tidak disimpan.', 'err');
+      return;
+    }
+  }
   const ok = await aksi('catat', {
     tipe: f.tipe, jumlah: f.jumlah, kategori: f.kategori,
-    catatan: f.catatan, akun: f.akun, tanggal: f.tanggal
+    catatan: f.catatan, akun: f.akun, tanggal: f.tanggal,
+    lampiran: meta ? { nama: meta.nama, mime: meta.mime, url: meta.url, id: meta.id, ukuran: meta.ukuran } : ''
   }, 'Transaksi tersimpan');
-  if (ok){ $('#mJumlah').value=''; $('#mCatatan').value=''; renderPreviewManual(); }
+  if (ok){
+    $('#mJumlah').value=''; $('#mCatatan').value='';
+    renderPreviewManual();
+  }
 };
 
 /* --- modal lihat / edit transaksi --- */
@@ -2132,12 +2490,16 @@ $('#txSimpan').onclick = async () => {
   if (!TX_AKTIF) return;
   const j = parseNominal($('#eJumlah').value);
   if (!j || isNaN(j) || j <= 0){ toast('<b>Nominal tidak valid</b>','err'); return; }
-  const ok = await aksi('ubah', {
+  const muatan = {
     id: TX_AKTIF.id, tipe: $('#eTipe').value, jumlah: j,
     kategori: $('#eKategori').value, tanggal: $('#eTanggal').value,
     akun: $('#eAkun').value, catatan: $('#eCatatan').value
-  }, 'Transaksi diperbarui');
-  if (ok) tutupTx();
+  };
+  // Hanya kirim field lampiran bila memang ada perubahan; URLSearchParams akan
+  // mengubah undefined menjadi string "undefined" dan itu ikut terkirim ke server.
+  if (TX_AKTIF._lampiranDihapus) muatan.lampiran = '';
+  const ok = await aksi('ubah', muatan, 'Transaksi diperbarui');
+  if (ok){ BERKAS_EDIT = null; TX_AKTIF._lampiranDihapus = false; tutupTx(); }
 };
 $('#txBatal').onclick = async () => {
   if (!TX_AKTIF) return;
