@@ -972,8 +972,10 @@
       Who has access <b>Anyone</b>. Salin URL yang berakhiran <code>/exec</code>.
       Setelah menambah transaksi di Telegram, klik <b>Muat Ulang</b>.
     </div>
-    <div style="display:flex;gap:10px;margin-top:6px">
+    <div id="sDiagnosa" class="hide"></div>
+    <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
       <button class="primary" id="sSave">Simpan &amp; Uji Koneksi</button>
+      <button class="ghost" id="sDiagnosaBtn">🔍 Diagnosa</button>
       <button class="ghost" id="sClose">Tutup</button>
     </div>
   </div>
@@ -1145,12 +1147,52 @@ function esc(s){
    ============================================================ */
 async function api(action, params){
   params = params || {};
+  if (!CFG.url) throw new Error('URL Web App belum diisi.');
   const qs = new URLSearchParams(Object.assign({ action: action, token: CFG.token || '' }, params));
-  const res = await fetch(CFG.url + '?' + qs.toString(), { method:'GET', redirect:'follow' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.error || 'API error');
-  return j;
+
+  let res;
+  try{
+    res = await fetch(CFG.url + '?' + qs.toString(), { method:'GET', redirect:'follow' });
+  }catch(err){
+    // "Failed to fetch" = browser tidak berhasil menjangkau endpoint sama sekali.
+    // Penyebab tersering ada di sisi deployment Apps Script, bukan di kode.
+    throw new Error(diagnosaJaringan(CFG.url, err));
+  }
+  if (!res.ok) throw new Error('Server membalas HTTP ' + res.status + '.');
+  const teks = await res.text();
+  try{
+    return JSON.parse(teks);
+  }catch(e){
+    const cuplikan = teks.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    throw new Error('Balasan bukan JSON — biasanya halaman login Google. '
+      + 'Pastikan "Who has access" = Anyone. Cuplikan: ' + cuplikan);
+  }
+}
+
+/** Ubah kegagalan jaringan jadi petunjuk yang bisa ditindaklanjuti. */
+function diagnosaJaringan(url, err){
+  const u = String(url || '');
+  const pesan = String(err && err.message || err);
+
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(u)){
+    if (/\/dev$/.test(u)){
+      return 'URL berakhiran /dev — itu hanya untuk pengujian dan selalu gagal dari '
+        + 'domain lain. Pakai URL yang berakhiran /exec dari menu Deploy.';
+    }
+    if (!/^https:/.test(u)) return 'URL harus dimulai dengan https://';
+    if (!/script\.google\.com\/macros\/s\//.test(u)){
+      return 'URL tidak dikenali sebagai Web App Apps Script. '
+        + 'Format yang benar: https://script.google.com/macros/s/AKfy.../exec';
+    }
+    return 'URL tidak berakhiran /exec. Salin ulang dari Deploy → Manage deployments.';
+  }
+
+  return 'Browser tidak bisa menjangkau server (' + pesan + '). '
+    + 'Periksa berurutan: (1) deploy Web App dengan "Who has access" = Anyone — '
+    + 'kalau masih "Only myself", browser lain selalu ditolak; '
+    + '(2) buka URL /exec langsung di tab baru — harus muncul JSON, '
+    + 'kalau muncul halaman login Google berarti akses belum Anyone; '
+    + '(3) ekstensi pemblokir iklan / mode privat bisa memblokir permintaan lintas situs.';
 }
 
 /* ============================================================
@@ -1253,7 +1295,7 @@ async function load(){
       DEMO = true;
       d = demoData(BULAN);
       setStatus('gagal konek — demo','off');
-      toast('<b>Gagal memuat data</b>' + esc(err.message) + '<br>Cek URL /exec di ⚙️ Sumber Data.', 'err');
+      toast('<b>Gagal memuat data</b>' + esc(err.message), 'err');
     }
   }
   DATA = d;
@@ -2265,6 +2307,60 @@ $('#btnSet').onclick = () => {
   $('#modal').classList.add('on');
 };
 $('#sClose').onclick = () => $('#modal').classList.remove('on');
+
+/** Diagnosa mandiri: cek bentuk URL, jangkauan jaringan, dan isi balasan. */
+$('#sDiagnosaBtn').onclick = async () => {
+  const url = $('#sUrl').value.trim();
+  const box = $('#sDiagnosa');
+  const baris = [];
+  const tambah = (ok, judul, detail) => baris.push({ ok, judul, detail });
+
+  // 1. bentuk URL
+  if (!url) tambah(false, 'URL kosong', 'Isi dulu URL /exec dari menu Deploy.');
+  else if (/\/dev$/.test(url)) tambah(false, 'URL berakhiran /dev',
+    '/dev hanya untuk pengujian internal dan selalu gagal dari domain lain. Pakai /exec.');
+  else if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url))
+    tambah(false, 'Bentuk URL tidak sesuai',
+      'Harus: https://script.google.com/macros/s/AKfy.../exec');
+  else tambah(true, 'Bentuk URL benar', url.slice(0, 62) + '…');
+
+  // 2. jangkauan jaringan
+  if (url && /^https:/.test(url)){
+    const uji = url + (url.indexOf('?') > -1 ? '&' : '?') + 'action=ping';
+    try{
+      const r = await fetch(uji, { method:'GET', redirect:'follow' });
+      tambah(true, 'Server terjangkau', 'HTTP ' + r.status);
+      const t = await r.text();
+      try{
+        const j = JSON.parse(t);
+        if (j.ok) tambah(true, 'Balasan JSON valid', 'waktu server: ' + (j.waktu || '-'));
+        else tambah(false, 'Server menolak', j.error || 'ok:false');
+      }catch(e){
+        tambah(false, 'Balasan bukan JSON — halaman login Google',
+          'Artinya "Who has access" belum Anyone. Cuplikan: '
+          + t.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0, 100));
+      }
+    }catch(err){
+      tambah(false, 'Tidak terjangkau dari browser', String(err.message || err));
+    }
+  }
+
+  // 3. token
+  const tok = $('#sToken').value.trim();
+  tambah(!!tok, tok ? 'API Token terisi' : 'API Token kosong',
+    tok ? 'panjang ' + tok.length + ' karakter'
+        : 'Kalau Script Property API_TOKEN diisi, token di sini harus sama persis.');
+
+  box.classList.remove('hide');
+  box.innerHTML = '<div class="note' + (baris.every(b => b.ok) ? '' : ' warn') + '">'
+    + '<b style="display:block;margin-bottom:8px">Hasil diagnosa</b>'
+    + baris.map(b => '<div style="margin-bottom:7px">'
+        + (b.ok ? '✅ ' : '❌ ') + '<b>' + esc(b.judul) + '</b>'
+        + '<div style="color:var(--mut);font-size:12px;margin-top:2px">'
+        + esc(b.detail) + '</div></div>').join('')
+    + '</div>';
+};
+
 $('#sSave').onclick = async () => {
   const url = $('#sUrl').value.trim();
   CFG = { url: url, token: $('#sToken').value.trim() };
@@ -2276,7 +2372,8 @@ $('#sSave').onclick = async () => {
     $('#modal').classList.remove('on');
     load();
   }catch(err){
-    toast('<b>Koneksi gagal</b>'+esc(err.message)+'<br>Pastikan deploy Web app = <b>Anyone</b>.','err');
+    // Pesan diagnosa bisa panjang — tampilkan apa adanya, jangan ditimpa lagi.
+    toast('<b>Koneksi gagal</b>' + esc(err.message), 'err');
   }
 };
 

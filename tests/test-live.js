@@ -15,6 +15,7 @@ const ok = (c, label, detail) => {
   else { fail++; console.log('  FAIL  ' + label + (detail ? '  →  ' + detail : '')); }
 };
 const eq = (a, b, label) => ok(a === b, label, 'dapat ' + JSON.stringify(a) + ', harap ' + JSON.stringify(b));
+const tunggu = (ms) => new Promise(r => setTimeout(r, ms || 80));
 
 /* ---- muat skrip halaman lalu suntik fetch tiruan sebelum init ---- */
 const body = html.match(/<script>([\s\S]*?)<\/script>/)[1];
@@ -70,11 +71,23 @@ w.fetch = (url, opts) => {
   PANGGILAN.push({ url: url, opts: opts || {} });
   const u = new URL(url);
   const action = u.searchParams.get('action');
-  if (action === 'ping') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, waktu: '2026-09-30T10:00:00Z' }) });
-  if (action === 'catat') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, data: { ID: 'TX-0005' } }) });
-  if (action === 'batal') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, data: 'TX-0002' }) });
-  if (action === 'bayar') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, data: { id: 'HT-0001', nama: 'Budi', dibayar: 6000000, sisa: 2000000, lunas: false } }) });
-  return Promise.resolve({ ok: true, json: () => Promise.resolve(PAYLOAD) });
+  // api() membaca balasan lewat .text() lalu JSON.parse, jadi mock harus menyediakan keduanya.
+  const balas = isi => {
+    const teks = JSON.stringify(isi);
+    return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(teks),
+      json: () => Promise.resolve(isi) });
+  };
+  if (action === 'ping') return balas({ ok: true, waktu: '2026-09-30T10:00:00Z' });
+  if (action === 'catat') return balas({ ok: true, data: { ID: 'TX-0005' } });
+  if (action === 'ubah') return balas({ ok: true, data: { ID: 'TX-0003' } });
+  if (action === 'batal') return balas({ ok: true, data: 'TX-0002' });
+  if (action === 'aktifkan') return balas({ ok: true, data: 'TX-0001' });
+  if (action === 'bayar') return balas({ ok: true, data: { id: 'HT-0001', nama: 'Budi', dibayar: 6000000, sisa: 2000000, lunas: false } });
+  if (action === 'tambahsumber') return balas({ ok: true, data: { ID: 'SD-0003' } });
+  if (action === 'ubahsumber') return balas({ ok: true, data: { ID: 'SD-0001' } });
+  if (action === 'hapussumber') return balas({ ok: true, data: 'SD-0001' });
+  if (action === 'plotanggaran') return balas({ ok: true, data: { dasar: 12000000, baris: [] } });
+  return balas(PAYLOAD);
 };
 w.localStorage.setItem('uangku.config.v1', JSON.stringify({ url: URL_EXEC, token: 'tok123' }));
 
@@ -319,12 +332,49 @@ setTimeout(() => {
             const hap = w.document.querySelector('[data-hapussumber]');
             ok(hap !== null, 'tombol Hapus tersedia di kartu sumber');
             hap.click();
-            setTimeout(() => {
+            setTimeout(async () => {
               const del = PANGGILAN.filter(x => x.url.indexOf('action=hapussumber') > -1);
               eq(del.length, 1, 'permintaan action=hapussumber terkirim');
               eq(new URL(del[0].url).searchParams.get('id'), 'SD-0001', 'ID sumber yang dihapus benar');
 
-              console.log('\n=== I. Ganti bulan & gagal koneksi ===');
+              console.log('\n=== J. Diagnosa koneksi ===');
+  ok(typeof w.diagnosaJaringan === 'function', 'fungsi diagnosaJaringan tersedia');
+  const dDev = w.diagnosaJaringan('https://script.google.com/macros/s/AK1/dev', new Error('x'));
+  ok(/\/dev/.test(dDev) && /\/exec/.test(dDev), 'URL /dev dideteksi dan disarankan /exec');
+  const dSalah = w.diagnosaJaringan('https://example.com/api', new Error('x'));
+  ok(/tidak dikenali|tidak berakhiran/.test(dSalah), 'URL bukan Apps Script ditolak: ' + dSalah.slice(0, 50));
+  const dHttp = w.diagnosaJaringan('http://script.google.com/macros/s/AK1/exec', new Error('x'));
+  ok(/https/.test(dHttp), 'URL non-https ditolak');
+  const dJaringan = w.diagnosaJaringan(URL_EXEC, new Error('Failed to fetch'));
+  ok(/Anyone/.test(dJaringan), 'kegagalan jaringan menyarankan cek akses Anyone');
+  ok(/Failed to fetch/.test(dJaringan), 'pesan asli disertakan agar bisa dicari');
+  ok(/login Google/.test(dJaringan), 'menyebut kemungkinan halaman login Google');
+
+  // tombol Diagnosa mengisi panel
+  $('#btnSet').click();
+  $('#sUrl').value = 'https://script.google.com/macros/s/AK1/dev';
+  $('#sToken').value = '';
+  $('#sDiagnosaBtn').click();
+  await tunggu(150);
+  ok(!$('#sDiagnosa').classList.contains('hide'), 'panel diagnosa terbuka');
+  const dg = $('#sDiagnosa').textContent;
+  ok(dg.indexOf('Hasil diagnosa') > -1, 'panel menampilkan judul');
+  ok(dg.indexOf('/dev') > -1, 'panel menandai masalah /dev');
+  ok(dg.indexOf('❌') > -1, 'panel memakai penanda gagal');
+  ok(dg.indexOf('API Token kosong') > -1, 'panel memeriksa token kosong');
+
+  $('#sUrl').value = URL_EXEC;
+  $('#sToken').value = 'tok123';
+  $('#sDiagnosaBtn').click();
+  await tunggu(200);
+  const dg2 = $('#sDiagnosa').textContent;
+  ok(dg2.indexOf('Bentuk URL benar') > -1, 'URL benar dikonfirmasi');
+  ok(dg2.indexOf('Server terjangkau') > -1, 'jangkauan server dikonfirmasi');
+  ok(dg2.indexOf('Balasan JSON valid') > -1, 'balasan JSON valid dikonfirmasi');
+  ok(dg2.indexOf('API Token terisi') > -1, 'token terisi dikonfirmasi');
+  $('#sClose').click();
+
+  console.log('\n=== K. Ganti bulan & gagal koneksi ===');
               PANGGILAN.length = 0;
               $('#mBulan').value = '2026-07';
               $('#mOk').click();
