@@ -55,6 +55,22 @@ setTimeout(() => {
     eq(w.document.querySelectorAll('#chartTren .bars i.k').length, 6, '6 batang pengeluaran');
     const h1 = cols[0].querySelector('i.m').style.height;
     ok(/%$/.test(h1), 'tinggi batang memakai persentase: ' + h1);
+
+    console.log('\n=== C2. Sparkline di kartu KPI ===');
+    ['#sparkMasuk','#sparkKeluar','#sparkSelisih'].forEach(s => {
+      ok($(s) !== null, 'wadah sparkline ada: ' + s);
+      ok($(s).querySelector('path.ln') !== null, 'garis sparkline tergambar: ' + s);
+      ok($(s).querySelector('path.ar') !== null, 'area bergradien tergambar: ' + s);
+      ok($(s).querySelector('circle') !== null, 'titik akhir tergambar: ' + s);
+    });
+    const dMasuk = $('#sparkMasuk').querySelector('path.ln').getAttribute('d');
+    ok(/^M[\d.]+ [\d.]+ L/.test(dMasuk), 'path sparkline berformat benar: ' + dMasuk.slice(0, 34));
+    ok(dMasuk.indexOf('NaN') === -1, 'path sparkline bebas NaN');
+    const semuaHtml = $('#sparkMasuk').innerHTML + $('#sparkKeluar').innerHTML + $('#sparkSelisih').innerHTML;
+    ok(['sm','sk','ss'].every(id => semuaHtml.indexOf('id="' + id + '"') > -1),
+      'setiap sparkline punya id gradien unik (tidak bentrok)');
+    ok(w.document.querySelectorAll('.reveal').length >= 6,
+      'grid utama memakai reveal berjenjang: ' + w.document.querySelectorAll('.reveal').length + ' blok');
     ok(cols[5].querySelector('.cap').textContent.trim().length > 0, 'label bulan terisi');
 
     console.log('\n=== D. Kategori & plot anggaran ===');

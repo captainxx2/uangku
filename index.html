@@ -368,6 +368,136 @@
   ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;border:2px solid var(--bg)}
   ::-webkit-scrollbar-thumb:hover{background:#31456b}
 </style>
+<style>
+  /* ==================================================================
+     MODERN LAYER — aurora, kaca berlapis, sparkline, reveal berjenjang
+     Ditulis sebagai blok terpisah agar tidak menyentuh aturan dasar.
+     ================================================================== */
+
+  /* ---- latar aurora bergerak + butiran halus ---- */
+  body::before{
+    content:"";position:fixed;inset:-30% -10% -30% -10%;z-index:-2;pointer-events:none;
+    background:
+      radial-gradient(42% 38% at 18% 22%,rgba(79,140,255,.22),transparent 66%),
+      radial-gradient(38% 34% at 82% 18%,rgba(124,92,255,.20),transparent 64%),
+      radial-gradient(34% 30% at 62% 88%,rgba(40,214,208,.13),transparent 66%);
+    filter:blur(28px);animation:aurora 26s ease-in-out infinite alternate;
+  }
+  @keyframes aurora{
+    0%{transform:translate3d(0,0,0) scale(1)}
+    50%{transform:translate3d(-2.5%,2%,0) scale(1.07)}
+    100%{transform:translate3d(2.5%,-2%,0) scale(1.03)}
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+  }
+  @media(prefers-reduced-motion:reduce){
+    body::before{animation:none}
+    *{transition-duration:.01ms !important;animation-duration:.01ms !important}
+  }
+
+  /* ---- kartu kaca: bingkai gradien + permukaan berlapis ---- */
+  .card{
+    background:
+      linear-gradient(180deg,rgba(30,45,74,.55),rgba(14,23,40,.85));
+    border:1px solid transparent;
+    background-clip:padding-box;
+    position:relative;
+    box-shadow:0 1px 0 rgba(255,255,255,.045) inset,
+               0 10px 30px -12px rgba(0,0,0,.75),
+               0 2px 6px -2px rgba(0,0,0,.5);
+  }
+  .card::before{
+    content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;
+    background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.03) 38%,
+      rgba(79,140,255,.14) 100%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    mask-composite:exclude;pointer-events:none;
+  }
+  .card:hover{border-color:transparent}
+  .kpi .card::before{
+    background:linear-gradient(160deg,rgba(255,255,255,.20),rgba(255,255,255,.04) 42%,
+      rgba(79,140,255,.22) 100%);
+  }
+
+  /* ---- KPI: lebih tinggi, angka gradien, sparkline ---- */
+  .kpi .card{padding:17px 18px 14px}
+  .kpi .val{
+    font-size:27px;letter-spacing:-1.15px;
+    background:linear-gradient(180deg,#ffffff,#c3d3ef);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .kpi .val.ok{background:linear-gradient(180deg,#7cf5b4,#1fb96c)}
+  .kpi .val.bad{background:linear-gradient(180deg,#ffa1a9,#e53e4e)}
+  .kpi .val.warn{background:linear-gradient(180deg,#ffd27a,#e08c00)}
+  .kpi .val.ok,.kpi .val.bad,.kpi .val.warn{
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .spark{display:block;width:100%;height:34px;margin-top:10px;overflow:visible}
+  .spark path.ln{fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .spark path.ar{stroke:none}
+  .spark circle{stroke:var(--card);stroke-width:1.5}
+  .kpi .card .bar{margin-top:10px}
+
+  /* ---- reveal berjenjang saat tab dibuka ---- */
+  .reveal > *{animation:rise .42s var(--ease) both}
+  .reveal > *:nth-child(1){animation-delay:.02s}
+  .reveal > *:nth-child(2){animation-delay:.07s}
+  .reveal > *:nth-child(3){animation-delay:.12s}
+  .reveal > *:nth-child(4){animation-delay:.17s}
+  .reveal > *:nth-child(5){animation-delay:.22s}
+  .reveal > *:nth-child(6){animation-delay:.27s}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .kpi .card.reveal > *{animation:none}
+
+  /* ---- donut lebih halus ---- */
+  .donut svg circle{transition:stroke-width .2s var(--ease),opacity .2s var(--ease)}
+  .donutlegend .it{
+    border-radius:9px;padding:7px 9px;margin:0 -9px;cursor:default;
+    transition:background .16s var(--ease);
+  }
+  .donutlegend .it:hover{background:rgba(79,140,255,.09)}
+  .donutlegend .it:hover .pc{color:var(--tx)}
+  .donutlegend .nm{font-weight:500}
+
+  /* ---- tabel: ID monospace, baris lebih lapang ---- */
+  #tblTx td code,#listTerakhir code{
+    font-family:"JetBrains Mono","Consolas",monospace;font-size:11.5px;
+    letter-spacing:-.2px;color:#9dc0ff;
+  }
+  tbody tr{position:relative}
+  tbody tr:hover td{background:rgba(79,140,255,.055)}
+  tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--acc)}
+
+  /* ---- baris daftar lebih hidup ---- */
+  .row{border-radius:10px;padding:12px 10px;margin:0 -10px}
+  .row:hover{background:rgba(79,140,255,.07)}
+
+  /* ---- tombol: sorotan atas + tekanan ---- */
+  button.primary{
+    background-image:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,0) 46%),
+      var(--grad-acc);
+    box-shadow:0 1px 0 rgba(255,255,255,.28) inset,0 8px 22px -10px rgba(79,140,255,1);
+  }
+  button.ghost:hover{box-shadow:0 0 0 1px rgba(79,140,255,.25) inset}
+
+  /* ---- fokus keyboard jelas ---- */
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:8px}
+
+  /* ---- nav: indikator lebih tegas ---- */
+  nav{background:rgba(11,18,33,.82);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,
+    0 12px 30px -18px rgba(0,0,0,.9)}
+  nav button.active{
+    background-image:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,0) 48%),
+      var(--grad-acc);
+  }
+
+  /* ---- pv & note sedikit lebih lembut ---- */
+  .pv{background:linear-gradient(180deg,rgba(32,48,78,.72),rgba(14,23,40,.55))}
+  .note{backdrop-filter:blur(4px)}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -394,14 +524,17 @@
 
   <!-- ================= DASHBOARD ================= -->
   <section id="tab-dash">
-    <div class="grid kpi" style="margin-bottom:18px">
+    <div class="grid kpi reveal" style="margin-bottom:18px">
       <div class="card ok"><div class="lbl">Pemasukan</div><div class="val ok" id="kMasuk">—</div>
-        <div class="sub" id="kMasukSub">bulan ini</div></div>
+        <div class="sub" id="kMasukSub">bulan ini</div>
+        <svg class="spark" id="sparkMasuk" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
       <div class="card bad"><div class="lbl">Pengeluaran</div><div class="val bad" id="kKeluar">—</div>
-        <div class="sub" id="kKeluarSub">bulan ini</div></div>
+        <div class="sub" id="kKeluarSub">bulan ini</div>
+        <svg class="spark" id="sparkKeluar" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
       <div class="card" id="kSelCard"><div class="lbl" id="kSelLbl">Selisih</div>
         <div class="val" id="kSelisih">—</div>
-        <div class="sub" id="kSelSub">—</div></div>
+        <div class="sub" id="kSelSub">—</div>
+        <svg class="spark" id="sparkSelisih" viewBox="0 0 100 34" preserveAspectRatio="none"></svg></div>
       <div class="card" id="kRasioCard"><div class="lbl">Rasio Tabungan</div>
         <div class="val" id="kRasio">—</div>
         <div class="sub" id="kRasioSub">target ≥ 20%</div>
@@ -410,7 +543,7 @@
         <div class="sub" id="kHutangSub">—</div></div>
     </div>
 
-    <div class="grid two" style="margin-bottom:18px">
+    <div class="grid two reveal" style="margin-bottom:18px">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <h3 style="margin:0">Tren 12 Bulan</h3>
@@ -430,7 +563,7 @@
       </div>
     </div>
 
-    <div class="grid two">
+    <div class="grid two reveal">
       <div class="card">
         <h3>Transaksi Terakhir</h3>
         <div id="listTerakhir"><div class="empty">Belum ada data</div></div>
@@ -465,7 +598,7 @@
     <h2>💰 Sumber Dana</h2>
     <div class="sub2">Langkah 1. Daftarkan dari mana uang masuk — gaji, usaha, bonus. Angka di sini menjadi <b>dasar penyusunan plot anggaran</b>.</div>
 
-    <div class="grid kpi" style="margin-bottom:16px">
+    <div class="grid kpi reveal" style="margin-bottom:16px">
       <div class="card"><div class="lbl">Pendapatan Tetap</div><div class="val ok" id="sTetap">—</div>
         <div class="sub">per bulan — dasar plot anggaran</div></div>
       <div class="card"><div class="lbl">Total Pendapatan</div><div class="val" id="sTotal">—</div>
@@ -476,7 +609,7 @@
         <div class="sub">pemasukan tercatat di Transaksi</div></div>
     </div>
 
-    <div class="grid two" style="margin-bottom:16px">
+    <div class="grid two reveal" style="margin-bottom:16px">
       <div class="card">
         <h3>Daftar Sumber Dana</h3>
         <div id="listSumber"><div class="empty">Belum ada sumber dana</div></div>
@@ -555,13 +688,13 @@
         </div>
       </div>
 
-      <div class="grid kpi" style="margin-bottom:16px" id="plotRingkas"></div>
+      <div class="grid kpi reveal" style="margin-bottom:16px" id="plotRingkas"></div>
       <div class="card" style="margin-bottom:16px">
         <h3>Plot per Kelompok</h3>
         <div id="listAnggaran"><div class="empty">Belum ada anggaran</div></div>
       </div>
 
-      <div class="grid two">
+      <div class="grid two reveal">
         <div class="card">
           <h3>Setel Satu Pos</h3>
           <form id="formAnggaran">
@@ -588,7 +721,7 @@
     <h2>Transaksi</h2>
     <div class="sub2">Catat manual, periksa detail, edit, atau batalkan. Transaksi yang masuk lewat Telegram muncul di daftar yang sama.</div>
 
-    <div class="grid two" style="margin-bottom:16px">
+    <div class="grid two reveal" style="margin-bottom:18px">
       <div class="card">
         <h3>Catat Manual</h3>
         <form id="formManual">
@@ -1101,6 +1234,44 @@ function renderTren(d){
     info.textContent = t.length + ' bulan · masuk ' + rpShort(totalMasuk) +
       ' · keluar ' + rpShort(totalKeluar);
   }
+
+  // sparkline di kartu KPI memakai seri yang sama
+  renderSpark('#sparkMasuk', t.map(x => x.masuk), '#25d07a', 'sm');
+  renderSpark('#sparkKeluar', t.map(x => x.keluar), '#ff5f6d', 'sk');
+  renderSpark('#sparkSelisih', t.map(x => x.selisih), '#4f8cff', 'ss');
+}
+
+/**
+ * Sparkline SVG sederhana: garis + area bergradien + titik terakhir.
+ * viewBox tetap 100x34 dengan preserveAspectRatio:none agar mengisi lebar kartu.
+ */
+function renderSpark(sel, nilai, warna, idGrad){
+  const el = $(sel);
+  if (!el) return;
+  const v = (nilai || []).filter(x => typeof x === 'number' && isFinite(x));
+  if (v.length < 2){ el.innerHTML = ''; return; }
+
+  const min = Math.min(...v, 0);
+  const max = Math.max(...v);
+  const span = (max - min) || 1;
+  const n = v.length;
+  // beri ruang atas-bawah agar garis tidak menempel tepi
+  const y = val => 30 - ((val - min) / span) * 26;
+
+  const pts = v.map((val, i) => [ (i / (n - 1)) * 100, y(val) ]);
+  const garis = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join(' ');
+  const area = garis + ' L100 34 L0 34 Z';
+  const akhir = pts[pts.length - 1];
+
+  el.innerHTML =
+    '<defs><linearGradient id="' + idGrad + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="' + warna + '" stop-opacity=".38"></stop>'
+    + '<stop offset="100%" stop-color="' + warna + '" stop-opacity="0"></stop>'
+    + '</linearGradient></defs>'
+    + '<path class="ar" d="' + area + '" fill="url(#' + idGrad + ')"></path>'
+    + '<path class="ln" d="' + garis + '" stroke="' + warna + '"></path>'
+    + '<circle cx="' + akhir[0].toFixed(2) + '" cy="' + akhir[1].toFixed(2) +
+      '" r="2.4" fill="' + warna + '"></circle>';
 }
 
 /* ---- donut pengeluaran per kategori ---- */
@@ -1660,7 +1831,7 @@ function renderPlan(d){
       <div class="sub">${cicilan?rp(cicilan)+'/bulan':''}</div></div>
   </div>
 
-  <div class="grid two" style="margin-bottom:14px">
+  <div class="grid two reveal" style="margin-bottom:14px">
     <div class="card">
       <h3>Alokasi Ideal 50 / 30 / 20</h3>
       <div class="sub2" style="margin-bottom:14px">Aturan umum: 50% kebutuhan pokok, 30% keinginan, 20% tabungan &amp; investasi.</div>

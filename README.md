@@ -151,16 +151,25 @@ tidak ada alur buntu.
 
 ### Desain
 
-- **Sistem token** di `:root` (warna, gradien, radius, bayangan, easing) — ubah satu variabel, seluruh
-  antarmuka ikut berubah.
-- Palet gelap navy dengan aksen gradien biru→ungu; kartu KPI punya garis aksen atas yang berubah warna
-  mengikuti status (hijau/biru/merah/kuning).
-- **Chart tren**: gridline 5 tingkat dengan label skala dibulatkan ke angka bulat, batang gradien,
-  tooltip berisi masuk/keluar/selisih, bulan terakhir ditandai.
-- **Donut kategori**: SVG murni (tanpa library), legenda dengan persentase dan penanda ⚠️/⛔ saat
-  melewati anggaran.
-- Navigasi bergaya segmented, header & nav lengket saat menggulir, modal dengan animasi,
-  `prefers`-friendly transisi, scrollbar kustom.
+**Sistem token** di `:root` (warna, gradien, radius, bayangan, easing) — ubah satu variabel, seluruh
+antarmuka ikut berubah. Ditambah satu blok `<style>` terpisah berisi "lapisan modern" agar aturan
+dasar tetap utuh dan mudah ditelusuri.
+
+- **Latar aurora bergerak** — tiga cahaya radial (biru/ungu/cyan) beranimasi 26 detik, ditutup
+  lapisan butiran halus (SVG turbulence) supaya tidak terlihat datar.
+- **Kartu kaca berbingkai gradien** — teknik `mask-composite: exclude` untuk menggambar tepi gradien
+  1px yang memudar dari kiri-atas terang ke kanan-bawah beraksen, plus sorotan dalam dan bayangan berlapis.
+- **KPI**: angka memakai gradien teks (putih→biru pucat, hijau/merah/kuning sesuai status),
+  **sparkline SVG** tren 12 bulan di tiga kartu, dan progress bar di kartu rasio.
+- **Reveal berjenjang** — saat tab dibuka, blok muncul berurutan dengan `nth-child` delay.
+- **Chart tren**: gridline 5 tingkat dengan label skala dibulatkan ke angka bulat, batang gradien
+  dengan glow, tooltip masuk/keluar/selisih, bulan terakhir ditandai.
+- **Donut kategori**: SVG murni (tanpa library), legenda interaktif dengan persentase dan penanda
+  ⚠️/⛔ saat melewati anggaran.
+- Navigasi segmented, header & nav lengket dengan blur, modal beranimasi, `:focus-visible` jelas,
+  scrollbar kustom, dan penghormatan penuh pada `prefers-reduced-motion`.
+
+Semua chart digambar dengan SVG/CSS sendiri — **tanpa dependensi runtime apa pun**.
 
 Transaksi batal tidak dihapus: baris tetap ada, dicoret, dan bisa dipulihkan lewat tab Transaksi
 (filter status → **Dibatalkan** → **♻️ Pulihkan**) atau perintah `/aktifkan`.
@@ -193,7 +202,7 @@ npm test
 | Berkas | Cakupan |
 |---|---|
 | `tests/test-backend.js` | 276 asersi: parser nominal, kategori, setup sheet, transaksi, agregasi surplus/defisit, sumber dana, konversi frekuensi, plot anggaran 50/30/20, hutang & pelunasan, edit/pulihkan, API `doGet`, router Telegram `doPost` |
-| `tests/test-dom.js` | 114 asersi: render KPI, chart + gridline, donut kategori, tabel, filter, pencarian, navigasi tab, form, toast |
+| `tests/test-dom.js` | 130 asersi: render KPI, chart + gridline, donut kategori, tabel, filter, pencarian, navigasi tab, form, toast |
 | `tests/test-live.js` | 109 asersi: bentuk permintaan bebas preflight CORS, render data API, aksi tulis, sumber dana & plot, penanganan gagal koneksi |
 
 ## Catatan teknis
