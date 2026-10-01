@@ -228,3 +228,36 @@ npm test
   (URL rahasia berisi `?k=...`); `ALLOWED_CHAT_IDS` membatasi siapa yang boleh memakai bot.
 - **Zona waktu**: `appsscript.json` memakai `Asia/Jakarta`, sehingga tanggal & bulan mengikuti WIB.
 - **Kuota**: batas gratis Apps Script (≈20.000 UrlFetch/hari) jauh di atas kebutuhan pencatatan pribadi.
+
+## Push ke GitHub
+
+Repo lokal sudah siap (branch `main`, 4 commit). Untuk menerbitkan ke GitHub:
+
+1. Buat repo kosong di <https://github.com/new> — nama mis. `uangku`, **Public**,
+   **jangan** centang "Add a README"/.gitignore/license.
+2. Jalankan skrip siap pakai, ganti URL dengan milik Anda:
+
+   ```
+   push-ke-github.bat https://github.com/USERNAME/uangku.git
+   ```
+
+   Atau manual:
+
+   ```bash
+   git remote set-url origin https://github.com/USERNAME/uangku.git
+   git push -u origin main
+   ```
+
+3. **Settings → Pages → Source: Deploy from a branch → main / (root) → Save**.
+   Dashboard tersedia di `https://USERNAME.github.io/uangku/`.
+
+Ada juga `keuangan-online.bundle` di `D:\My Project\` — salinan lengkap riwayat git,
+berguna kalau repo ini dipindah komputer:
+
+```bash
+git clone keuangan-online.bundle uangku
+```
+
+Saat membuka dashboard dari GitHub Pages, klik **⚙️ Sumber Data** dan tempel URL `/exec`
+Apps Script Anda — konfigurasi disimpan di `localStorage` browser, jadi token tidak ikut
+ter-commit ke repo.
